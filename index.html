@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="theme-color" content="#0A0A0B"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="description" content="Adelani AI Chat — Multi-Agent AI Platform"/>
+<title>Adelani AI Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body,#root{height:100%;overflow:hidden}
+body{font-family:'DM Sans',sans-serif;overscroll-behavior:none;background:#0A0A0B}
+@keyframes bop{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-7px)}}
+@keyframes fup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes sideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px) translateX(-50%)}to{opacity:1;transform:translateY(0) translateX(-50%)}}
+@keyframes orb1{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,-30px)}}
+@keyframes orb2{0%,100%{transform:translate(0,0)}50%{transform:translate(-40px,25px)}}
+@keyframes glow{0%,100%{opacity:0.6}50%{opacity:1}}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:3px}
+textarea{resize:none;outline:none;border:none;-webkit-appearance:none;background:transparent}
+input{outline:none;-webkit-appearance:none;background:transparent}
+button{cursor:pointer;transition:all 0.2s ease}
+.md strong{font-weight:600}.md em{font-style:italic}
+.md code{font-family:monospace;font-size:12.5px;padding:2px 7px;border-radius:5px}
+.md pre{border-radius:10px;padding:14px;overflow-x:auto;margin:10px 0;font-family:monospace;font-size:12px;line-height:1.6}
+.md .mh1{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;margin:14px 0 5px}
+.md .mh2{font-family:'Syne',sans-serif;font-weight:600;font-size:14.5px;margin:10px 0 4px}
+.md .mh3{font-weight:600;font-size:13.5px;margin:8px 0 3px}
+.md .mli{display:flex;gap:8px;margin:3px 0;align-items:flex-start}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useRef} = React;
+
+/* ── CHANGE THIS to your Render backend URL after deployment ─── */
+const BACKEND = "https://YOUR-APP.onrender.com";
+
+const ls={get:k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}},del:k=>{try{localStorage.removeItem(k)}catch{}}};
+const today=()=>new Date().toISOString().split("T")[0];
+const fmt=iso=>new Date(iso).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+const GUEST_LIMIT=10;
+
+const TH={
+  dark:{bg:"#0A0A0B",surf:"#0D0D0F",card:"#111113",border:"#1A1A1C",text:"#EDE5D8",muted:"#5A5A6A",dim:"#252528",inp:"#141416",bub:"#141416",bubBrd:"#222226",overlay:"rgba(0,0,0,0.75)"},
+  light:{bg:"#F2ECE0",surf:"#FBF8F1",card:"#FFF",border:"#E2D9CA",text:"#1A1208",muted:"#7A7070",dim:"#C8C0B0",inp:"#EDEAE0",bub:"#FFF",bubBrd:"#E2D9CA",overlay:"rgba(0,0,0,0.45)"}
+};
+
+const AGENTS=[
+  {id:"asha",name:"Asha",icon:"✦",role:"General Intelligence",color:"#F0B429",glow:"rgba(240,180,41,0.18)",
+   system:"You are Asha, Adelani AI Chat's warm and highly intelligent general assistant. Give rich, accurate, well-structured answers. You represent the spirit of Adelani — the crown that opens paths."},
+  {id:"scholar",name:"Scholar",icon:"◈",role:"Education & Research",color:"#4DB8FF",glow:"rgba(77,184,255,0.18)",
+   system:"You are Scholar, Adelani AI Chat's academic intelligence. You excel at curriculum design, research methodology, academic writing, and CBE frameworks for African higher education."},
+  {id:"bizna",name:"Bizna",icon:"◆",role:"Business & Productivity",color:"#FF9F2F",glow:"rgba(255,159,47,0.18)",
+   system:"You are Bizna, Adelani AI Chat's business intelligence. Help with strategy, entrepreneurship, marketing, finance. You understand African markets and emerging economies. Be direct and action-oriented."},
+  {id:"dawa",name:"Dawa",icon:"✿",role:"Health & Wellbeing",color:"#00D9A6",glow:"rgba(0,217,166,0.18)",
+   system:"You are Dawa (Swahili for medicine), Adelani AI Chat's compassionate health companion. Provide health information and wellness guidance. Always encourage consulting qualified professionals."},
+  {id:"ubuntu",name:"Ubuntu",icon:"◉",role:"African Languages & Culture",color:"#FF6B35",glow:"rgba(255,107,53,0.18)",
+   system:"You are Ubuntu, named after 'I am because we are.' Expert in African languages (Yoruba, Igbo, Hausa, Swahili, Amharic, Zulu, Twi), cultures, histories, and philosophies."},
+  {id:"nexus",name:"Nexus",icon:"⊕",role:"Live Web Research",color:"#A78BFF",glow:"rgba(167,139,255,0.18)",web:true,
+   system:"You are Nexus, Adelani AI Chat's live web research agent. Search the internet in real time. Synthesize results into clear responses and cite your sources."},
+];
+
+function renderMd(raw,accent,dark){
+  const cc=dark?"rgba(255,255,255,0.09)":"rgba(0,0,0,0.07)";
+  const pc=dark?"#0F0F11":"#F0EBE0";
+  let t=raw.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  t=t.replace(/```[\w]*\n?([\s\S]*?)```/g,`<pre style="background:${pc};border:1px solid ${dark?"#222":"#ddd"};padding:13px;border-radius:10px;overflow-x:auto;margin:10px 0"><code>$1</code></pre>`);
+  t=t.replace(/`([^`\n]+)`/g,`<code style="background:${cc};padding:2px 7px;border-radius:5px">$1</code>`);
+  t=t.replace(/\*\*\*([^*\n]+)\*\*\*/g,"<strong><em>$1</em></strong>");
+  t=t.replace(/\*\*([^*\n]+)\*\*/g,"<strong>$1</strong>");
+  t=t.replace(/\*([^*\n]+)\*/g,"<em>$1</em>");
+  t=t.replace(/^### (.+)$/gm,'<div class="mh3">$1</div>');
+  t=t.replace(/^## (.+)$/gm,'<div class="mh2">$1</div>');
+  t=t.replace(/^# (.+)$/gm,'<div class="mh1">$1</div>');
+  t=t.replace(/^\d+\. (.+)$/gm,(m,p,off,s)=>{const n=s.slice(0,off).split("\n").filter(l=>/^\d+\./.test(l)).length+1;return `<div class="mli"><span style="color:${accent};flex-shrink:0;min-width:20px;font-weight:700">${n}.</span><span>${p}</span></div>`;});
+  t=t.replace(/^[-*] (.+)$/gm,`<div class="mli"><span style="color:${accent};flex-shrink:0;font-weight:700">•</span><span>$1</span></div>`);
+  t=t.replace(/\n/g,"<br/>");
+  return t;
+}
+
+function Dots({color}){
+  return <div style={{display:"flex",gap:5,padding:"13px 16px"}}>
+    {[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:color,animation:`bop 1.3s ease-in-out ${i*0.22}s infinite`}}/>)}
+  </div>;
+}
+
+function Bubble({msg,agent,t,dark}){
+  const [cp,setCp]=useState(false);
+  const u=msg.role==="user";
+  const copy=()=>{navigator.clipboard?.writeText(msg.content).then(()=>{setCp(true);setTimeout(()=>setCp(false),1800);});};
+  return(
+    <div style={{display:"flex",justifyContent:u?"flex-end":"flex-start",marginBottom:16,gap:9,animation:"fup 0.3s ease"}}>
+      {!u&&<div style={{width:32,height:32,borderRadius:"50%",background:`${agent.color}22`,border:`1.5px solid ${agent.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:agent.color,flexShrink:0,marginTop:2}}>{agent.icon}</div>}
+      <div style={{maxWidth:"76%",display:"flex",flexDirection:"column",alignItems:u?"flex-end":"flex-start"}}>
+        {msg.image&&<img src={`data:image/jpeg;base64,${msg.image}`} style={{maxWidth:200,borderRadius:12,marginBottom:6,border:`1px solid ${t.border}`}} alt=""/>}
+        <div style={{position:"relative"}}>
+          <div className="md" style={{padding:"11px 15px",borderRadius:u?"18px 18px 5px 18px":"18px 18px 18px 5px",background:u?`linear-gradient(135deg,${agent.color}DD,${agent.color}AA)`:t.bub,color:u?"#0A0A0B":t.text,fontSize:13.5,lineHeight:1.7,wordBreak:"break-word",border:u?"none":`1px solid ${t.bubBrd}`,boxShadow:u?`0 4px 20px ${agent.color}40`:"0 2px 8px rgba(0,0,0,0.15)"}}
+            dangerouslySetInnerHTML={u?undefined:{__html:renderMd(msg.content,agent.color,dark)}}>
+            {u?msg.content:undefined}
+          </div>
+          <button onClick={copy} style={{position:"absolute",top:5,right:u?undefined:5,left:u?5:undefined,width:22,height:22,borderRadius:6,background:dark?"rgba(0,0,0,0.55)":"rgba(255,255,255,0.85)",border:"none",color:t.muted,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",opacity:0.7}}>{cp?"✓":"⎘"}</button>
+        </div>
+        <div style={{fontSize:10,color:t.muted,marginTop:3,display:"flex",gap:6,alignItems:"center"}}>
+          {fmt(msg.timestamp)}
+          {msg.model&&!u&&<span style={{padding:"1px 6px",borderRadius:10,background:dark?"#1A1A1C":"#F0EBE0",fontSize:9.5,color:t.muted,border:`1px solid ${t.border}`}}>{msg.model.split("/").pop()?.replace(":free","").slice(0,22)}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthScreen({onAuth,onGuest,t,dark}){
+  const [tab,setTab]=useState("guest");
+  const [f,setF]=useState({username:"",email:"",password:""});
+  const [err,setErr]=useState("");const [info,setInfo]=useState("");const [busy,setBusy]=useState(false);
+  const [gLeft,setGL]=useState(GUEST_LIMIT);
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  useEffect(()=>{const cfg=ls.get("adelani-cfg")||{};const lim=cfg.guestLimit??GUEST_LIMIT;const use=ls.get(`g-${today()}`)||{count:0};setGL(Math.max(0,lim-use.count));},[]);
+
+  const login=async()=>{setErr("");setBusy(true);
+    try{const r=await fetch(`${BACKEND}/api/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:f.username,password:f.password})});
+      const d=await r.json();if(!r.ok){setErr(d.error||"Login failed.");setBusy(false);return;}
+      ls.set("adelani-session",{...d,expiresAt:Date.now()+7*86400000});onAuth(d);}
+    catch(e){setErr("Cannot reach server. Is the backend running?");}setBusy(false);};
+
+  const register=async()=>{setErr("");setInfo("");setBusy(true);
+    try{const r=await fetch(`${BACKEND}/api/register`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(f)});
+      const d=await r.json();if(!r.ok){setErr(d.error||"Registration failed.");setBusy(false);return;}
+      setInfo(d.message);setTab("login");setF(p=>({...p,password:""}));}
+    catch(e){setErr("Cannot reach server. Is the backend running?");}setBusy(false);};
+
+  const tabS=id=>({flex:1,padding:"12px 0",background:"transparent",border:"none",borderBottom:`2px solid ${tab===id?"#F0B429":"transparent"}`,color:tab===id?"#F0B429":t.muted,fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:12.5,letterSpacing:"0.5px",transition:"all 0.2s"});
+  const inpS={width:"100%",padding:"12px 14px",borderRadius:10,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:13.5,fontFamily:"'DM Sans',sans-serif",marginBottom:12};
+  const btnS={width:"100%",padding:"13px",borderRadius:12,background:"linear-gradient(135deg,#F0B429,#E05C2A)",border:"none",color:"#0A0A0B",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14.5,boxShadow:"0 4px 24px rgba(240,180,41,0.4)"};
+
+  return(
+    <div style={{height:"100%",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto",position:"relative"}}>
+      {dark&&<>
+        <div style={{position:"fixed",top:"-20%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:"radial-gradient(circle,rgba(240,180,41,0.06),transparent 70%)",pointerEvents:"none",animation:"orb1 14s ease-in-out infinite"}}/>
+        <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(224,92,42,0.05),transparent 70%)",pointerEvents:"none",animation:"orb2 18s ease-in-out infinite"}}/>
+      </>}
+      <div style={{width:"100%",maxWidth:400,position:"relative",zIndex:1}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{display:"inline-flex",width:70,height:70,borderRadius:20,background:"linear-gradient(135deg,rgba(240,180,41,0.2),rgba(224,92,42,0.15))",border:"2px solid rgba(240,180,41,0.3)",alignItems:"center",justifyContent:"center",marginBottom:14,boxShadow:"0 0 40px rgba(240,180,41,0.12)"}}>
+            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,background:"linear-gradient(135deg,#F0B429,#E05C2A)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI</span>
+          </div>
+          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,background:"linear-gradient(135deg,#F0B429 30%,#E05C2A 70%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:"-0.8px"}}>Adelani AI Chat</div>
+          <div style={{color:t.muted,fontSize:11,marginTop:4,letterSpacing:"3px"}}>MULTI-AGENT PLATFORM</div>
+        </div>
+        <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
+          {AGENTS.map(a=><div key={a.id} style={{padding:"4px 12px",borderRadius:20,background:`${a.color}14`,border:`1px solid ${a.color}28`,fontSize:11,color:a.color,fontWeight:600}}>{a.icon} {a.name}</div>)}
+        </div>
+        <div style={{background:dark?"rgba(13,13,15,0.92)":t.surf,borderRadius:22,border:`1px solid ${t.border}`,overflow:"hidden",boxShadow:dark?"0 24px 80px rgba(0,0,0,0.6)":"0 20px 60px rgba(0,0,0,0.15)",backdropFilter:"blur(20px)"}}>
+          <div style={{display:"flex",borderBottom:`1px solid ${t.border}`,background:dark?"rgba(0,0,0,0.3)":t.card}}>
+            {["guest","login","register"].map(id=><button key={id} onClick={()=>{setTab(id);setErr("");setInfo("");}} style={tabS(id)}>{id==="guest"?"👤 Guest":id==="login"?"🔑 Login":"✨ Register"}</button>)}
+          </div>
+          <div style={{padding:24}}>
+            {tab==="guest"&&(
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:44,marginBottom:12}}>🌍</div>
+                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:19,color:t.text,marginBottom:7}}>Try Adelani AI Free</div>
+                <div style={{color:t.muted,fontSize:13,lineHeight:1.65,marginBottom:18}}>Access all 6 AI agents with a free daily allowance. No account required.</div>
+                <div style={{background:dark?"rgba(240,180,41,0.07)":t.card,borderRadius:14,padding:"15px 18px",marginBottom:18,border:"1px solid rgba(240,180,41,0.2)"}}>
+                  <div style={{fontSize:30,fontFamily:"'Syne',sans-serif",fontWeight:800,background:"linear-gradient(135deg,#F0B429,#E05C2A)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{gLeft}</div>
+                  <div style={{color:t.muted,fontSize:11.5,marginTop:2}}>free messages remaining today</div>
+                  <div style={{height:3,background:t.border,borderRadius:2,marginTop:12}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#F0B429,#E05C2A)",width:`${(gLeft/GUEST_LIMIT)*100}%`}}/></div>
+                </div>
+                <button onClick={onGuest} style={btnS}>Explore as Guest →</button>
+                <div style={{color:t.muted,fontSize:12,marginTop:12}}>Register for unlimited premium access</div>
+              </div>
+            )}
+            {(tab==="login"||tab==="register")&&(
+              <div>
+                {tab==="register"&&<input value={f.email} onChange={e=>set("email",e.target.value)} placeholder="Email address" style={inpS}/>}
+                <input value={f.username} onChange={e=>set("username",e.target.value)} placeholder="Username" style={inpS}/>
+                <input type="password" value={f.password} onChange={e=>set("password",e.target.value)} placeholder="Password" onKeyDown={e=>e.key==="Enter"&&(tab==="login"?login():register())} style={{...inpS,marginBottom:16}}/>
+                {err&&<div style={{color:"#FF6B6B",fontSize:12.5,marginBottom:12,padding:"10px 13px",borderRadius:9,background:"rgba(255,107,107,0.1)",border:"1px solid rgba(255,107,107,0.2)"}}>{err}</div>}
+                {info&&<div style={{color:"#3ECF8E",fontSize:12.5,marginBottom:12,padding:"10px 13px",borderRadius:9,background:"rgba(62,207,142,0.1)",border:"1px solid rgba(62,207,142,0.2)"}}>{info}</div>}
+                <button onClick={tab==="login"?login:register} style={btnS} disabled={busy}>
+                  {busy?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><div style={{width:14,height:14,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:"#0A0A0B",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>{tab==="login"?"Signing in...":"Registering..."}</span>:tab==="login"?"Sign In →":"Create Account →"}
+                </button>
+                {tab==="register"&&<div style={{color:t.muted,fontSize:12,textAlign:"center",marginTop:12,lineHeight:1.6}}>After registration, your account will be activated by the admin and you'll receive a notification.</div>}
+                {tab==="login"&&<div style={{color:t.muted,fontSize:11.5,textAlign:"center",marginTop:10}}>Admin: admin / adelani2024</div>}
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{textAlign:"center",marginTop:18,color:t.muted,fontSize:11,opacity:0.5}}>Adelani · <em>The crown that opens paths</em></div>
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({onBack,t,dark,toggleTheme,themeKey}){
+  const ADMIN_SECRET="adelani-admin-2024";
+  const [users,setUsers]=useState([]);const [aTab,setAT]=useState("users");const [gLimit,setGL]=useState(GUEST_LIMIT);const [toast,setToast]=useState("");const [busy,setBusy]=useState(false);
+  const showT=m=>{setToast(m);setTimeout(()=>setToast(""),2600);};
+  useEffect(()=>{(async()=>{setBusy(true);try{const r=await fetch(`${BACKEND}/api/admin/users?secret=${ADMIN_SECRET}`);const d=await r.json();if(Array.isArray(d))setUsers(d);}catch{}const cfg=ls.get("adelani-cfg")||{};setGL(cfg.guestLimit??GUEST_LIMIT);setBusy(false);})();},[]);
+  const action=async(username,act)=>{try{const r=await fetch(`${BACKEND}/api/admin/action`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({secret:ADMIN_SECRET,username,action:act})});const d=await r.json();if(d.success){setUsers(p=>act==="delete"?p.filter(u=>u.username!==username):p.map(u=>u.username===username?{...u,...d.user}:u));showT("Done!");}}catch{showT("Server error.");}};
+  const saveLimit=()=>{const cfg=ls.get("adelani-cfg")||{};ls.set("adelani-cfg",{...cfg,guestLimit:Number(gLimit)});showT("Saved!");};
+  const tbtn=(id,lbl)=><button onClick={()=>setAT(id)} style={{padding:"7px 15px",borderRadius:9,background:aTab===id?"rgba(240,180,41,0.14)":"transparent",border:aTab===id?"1px solid rgba(240,180,41,0.35)":"1px solid transparent",color:aTab===id?"#F0B429":t.muted,fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:12.5}}>{lbl}</button>;
+  return(
+    <div style={{height:"100%",background:t.bg,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"0 16px",height:54,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${t.border}`,background:dark?"rgba(10,10,11,0.95)":t.surf,backdropFilter:"blur(16px)",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:11}}>
+          <button onClick={onBack} style={{background:t.inp,border:`1px solid ${t.border}`,borderRadius:9,padding:"6px 12px",color:t.text,fontSize:12.5}}>← Chat</button>
+          <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#F0B429,#E05C2A)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Admin Panel</span>
+        </div>
+        <button onClick={toggleTheme} style={{background:t.inp,border:`1px solid ${t.border}`,borderRadius:9,width:34,height:34,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>{dark?"☀️":"🌙"}</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"18px 16px",maxWidth:800,margin:"0 auto",width:"100%"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
+          {[{l:"Total",v:users.length,e:"👥",c:"#F0B429"},{l:"Activated",v:users.filter(u=>u.activated).length,e:"✅",c:"#3ECF8E"},{l:"Pending",v:users.filter(u=>!u.activated).length,e:"⏳",c:"#FF9F2F"}].map(s=>(
+            <div key={s.l} style={{background:dark?"rgba(255,255,255,0.03)":t.card,borderRadius:14,padding:"14px 16px",border:`1px solid ${t.border}`,textAlign:"center"}}>
+              <div style={{fontSize:22,marginBottom:5}}>{s.e}</div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,color:s.c}}>{s.v}</div>
+              <div style={{fontSize:11,color:t.muted,marginTop:2}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:7,marginBottom:16}}>{tbtn("users","👥 Users")}{tbtn("settings","⚙️ Settings")}</div>
+        {aTab==="users"&&(
+          <div style={{background:dark?"rgba(255,255,255,0.02)":t.card,borderRadius:16,border:`1px solid ${t.border}`,overflow:"hidden"}}>
+            {busy?<div style={{padding:36,textAlign:"center",color:t.muted}}>Loading...</div>
+            :users.length===0?<div style={{padding:36,textAlign:"center",color:t.muted}}>No registered users yet.</div>
+            :users.map((u,i)=>(
+              <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"13px 16px",borderBottom:i<users.length-1?`1px solid ${t.border}`:"none",flexWrap:"wrap"}}>
+                <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,rgba(240,180,41,0.25),rgba(224,92,42,0.15))",border:"1px solid rgba(240,180,41,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#F0B429",fontSize:14,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
+                <div style={{flex:1,minWidth:100}}>
+                  <div style={{fontWeight:600,color:t.text,fontSize:13}}>{u.username}</div>
+                  <div style={{fontSize:11,color:t.muted}}>{u.email||"No email"} · {u.msgCount||0} msgs</div>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                  <span style={{padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:u.activated?"rgba(62,207,142,0.14)":"rgba(255,159,47,0.14)",color:u.activated?"#3ECF8E":"#FF9F2F",border:`1px solid ${u.activated?"rgba(62,207,142,0.3)":"rgba(255,159,47,0.3)"}`}}>{u.activated?"✓ Active":"⏳ Pending"}</span>
+                  {!u.activated&&<button onClick={()=>action(u.username,"activate")} style={{padding:"5px 11px",borderRadius:8,background:"rgba(62,207,142,0.14)",border:"1px solid rgba(62,207,142,0.3)",color:"#3ECF8E",fontSize:11.5,fontWeight:600}}>Activate</button>}
+                  {u.activated&&<button onClick={()=>action(u.username,"deactivate")} style={{padding:"5px 11px",borderRadius:8,background:"rgba(255,159,47,0.1)",border:"1px solid rgba(255,159,47,0.3)",color:"#FF9F2F",fontSize:11.5}}>Revoke</button>}
+                  <button onClick={()=>action(u.username,u.banned?"unban":"ban")} style={{padding:"5px 11px",borderRadius:8,background:u.banned?"rgba(62,207,142,0.1)":"rgba(255,107,107,0.1)",border:`1px solid ${u.banned?"rgba(62,207,142,0.3)":"rgba(255,107,107,0.3)"}`,color:u.banned?"#3ECF8E":"#FF6B6B",fontSize:11.5}}>{u.banned?"Restore":"Suspend"}</button>
+                  <button onClick={()=>action(u.username,"delete")} style={{padding:"5px 10px",borderRadius:8,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:11.5}}>✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {aTab==="settings"&&(
+          <div style={{background:dark?"rgba(255,255,255,0.02)":t.card,borderRadius:16,border:`1px solid ${t.border}`,padding:22}}>
+            <div style={{marginBottom:20}}>
+              <label style={{fontSize:11,color:t.muted,fontWeight:700,display:"block",marginBottom:8,letterSpacing:"1.5px",textTransform:"uppercase"}}>Guest Message Limit / 24h</label>
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                <input type="number" value={gLimit} onChange={e=>setGL(e.target.value)} min="1" max="100" style={{width:80,padding:"10px 14px",borderRadius:10,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:800,textAlign:"center"}}/>
+                <span style={{color:t.muted,fontSize:13}}>messages per guest per day</span>
+              </div>
+            </div>
+            <div style={{background:dark?"rgba(240,180,41,0.05)":"#fffbe8",border:"1px solid rgba(240,180,41,0.2)",borderRadius:12,padding:"12px 16px",marginBottom:20,fontSize:12.5,color:t.muted,lineHeight:1.7}}>
+              Default admin: <code style={{color:"#F0B429"}}>admin</code> / <code style={{color:"#F0B429"}}>adelani2024</code><br/>Set ADMIN_PASSWORD env var on Render to change.
+            </div>
+            <button onClick={saveLimit} style={{padding:"11px 24px",borderRadius:11,background:"linear-gradient(135deg,#F0B429,#E05C2A)",border:"none",color:"#0A0A0B",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14}}>Save Settings</button>
+          </div>
+        )}
+      </div>
+      {toast&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:t.surf,border:`1px solid ${t.border}`,borderRadius:10,padding:"9px 18px",fontSize:12.5,color:t.text,boxShadow:"0 8px 30px rgba(0,0,0,0.4)",zIndex:200}}>{toast}</div>}
+    </div>
+  );
+}
+
+function App(){
+  const [view,setView]=useState("loading");
+  const [user,setUser]=useState(null);const [isGuest,setGuest]=useState(false);
+  const [theme,setTheme]=useState("dark");
+  const [agent,setAgent]=useState(AGENTS[0]);
+  const [convs,setConvs]=useState({});
+  const [input,setInput]=useState("");const [busy,setBusy]=useState(false);
+  const [mic,setMic]=useState(false);const [img,setImg]=useState(null);const [imgP,setImgP]=useState(null);
+  const [sideOpen,setSideOpen]=useState(false);const [toast,setToast]=useState("");const [gLeft,setGL]=useState(GUEST_LIMIT);
+  const [mobile,setMobile]=useState(window.innerWidth<720);
+  const botRef=useRef(null),fileRef=useRef(null),recRef=useRef(null),taRef=useRef(null);
+  const t=TH[theme];const dark=theme==="dark";const msgs=convs[agent.id]||[];
+
+  useEffect(()=>{const fn=()=>setMobile(window.innerWidth<720);window.addEventListener("resize",fn);return()=>window.removeEventListener("resize",fn);},[]);
+  useEffect(()=>{const th=ls.get("adelani-theme");if(th)setTheme(th);const ses=ls.get("adelani-session");if(ses&&ses.expiresAt>Date.now()){setUser(ses);setView("chat");}else setView("auth");},[]);
+  const toggleTheme=()=>{const n=theme==="dark"?"light":"dark";setTheme(n);ls.set("adelani-theme",n);};
+  const showToast=m=>{setToast(m);setTimeout(()=>setToast(""),2800);};
+
+  useEffect(()=>{const k=user?`adelani-m-${user.id}-${agent.id}`:`adelani-gm-${agent.id}`;const r=ls.get(k);if(r)setConvs(p=>({...p,[agent.id]:r}));},[agent.id,user?.id]);
+  useEffect(()=>{if(!msgs.length)return;const k=user?`adelani-m-${user.id}-${agent.id}`:`adelani-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,agent.id,user?.id]);
+  useEffect(()=>{if(!isGuest)return;const cfg=ls.get("adelani-cfg")||{};const lim=cfg.guestLimit??GUEST_LIMIT;const use=ls.get(`g-${today()}`)||{count:0};setGL(Math.max(0,lim-use.count));},[isGuest,msgs.length]);
+  useEffect(()=>{botRef.current?.scrollIntoView({behavior:"smooth"});},[msgs,busy]);
+
+  const send=async()=>{
+    const text=input.trim();if(!text&&!img)return;
+    if(isGuest){const cfg=ls.get("adelani-cfg")||{};const lim=cfg.guestLimit??GUEST_LIMIT;const use=ls.get(`g-${today()}`)||{count:0};if(use.count>=lim){showToast("Daily limit reached — register for unlimited access!");return;}const nc=use.count+1;ls.set(`g-${today()}`,{count:nc});setGL(Math.max(0,lim-nc));}
+    const um={role:"user",content:text||"Describe this image.",image:img,timestamp:new Date().toISOString()};
+    const hist=[...msgs,um];setConvs(p=>({...p,[agent.id]:hist}));setInput("");setImg(null);setImgP(null);setBusy(true);
+    if(taRef.current)taRef.current.style.height="auto";
+    const ses=ls.get("adelani-session")||{};
+    try{
+      const r=await fetch(`${BACKEND}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:hist.map(m=>({role:m.role,content:m.content})),systemPrompt:agent.system,username:ses.username||null,sessionToken:ses.sessionToken||null})});
+      const d=await r.json();const reply=d.reply||(d.error?`⚠️ ${d.error}`:"No response.");
+      setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:reply,model:d.model,timestamp:new Date().toISOString()}]}));
+    }catch(e){setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:`⚠️ Cannot reach backend server.\n\nMake sure your Render deployment is live and BACKEND constant is updated in index.html.\n\nError: ${e.message}`,timestamp:new Date().toISOString()}]}));}
+    setBusy(false);
+  };
+
+  const onKey=e=>{if(e.key==="Enter"&&!e.shiftKey&&!mobile){e.preventDefault();send();}};
+  const toggleMic=()=>{if(mic){recRef.current?.stop();setMic(false);return;}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){showToast("Voice not supported");return;}const r=new SR();r.continuous=false;r.interimResults=false;r.onresult=e=>{setInput(p=>(p+" "+e.results[0][0].transcript).trim());setMic(false);};r.onend=()=>setMic(false);r.onerror=()=>setMic(false);recRef.current=r;r.start();setMic(true);};
+  const handleImg=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{setImg(ev.target.result.split(",")[1]);setImgP(ev.target.result);};r.readAsDataURL(f);e.target.value="";};
+  const clearChat=()=>{setConvs(p=>({...p,[agent.id]:[]}));const k=user?`adelani-m-${user.id}-${agent.id}`:`adelani-gm-${agent.id}`;ls.del(k);showToast("Cleared");};
+  const exportPDF=()=>{if(!msgs.length){showToast("Nothing to export.");return;}const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Adelani AI</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;color:#1a1208;padding:20px}h1{font-size:24px}h2{font-size:11px;color:#999;letter-spacing:2px;text-transform:uppercase;font-family:sans-serif;font-weight:400;margin:4px 0 28px}.m{margin:14px 0;padding:12px 16px;border-radius:10px}.u{background:#f5f0e3;margin-left:60px}.a{background:#fff;border:1px solid #e0d8cc;margin-right:60px}.role{font-size:10px;font-weight:700;text-transform:uppercase;color:#999;font-family:sans-serif;margin-bottom:5px}.txt{font-size:13.5px;line-height:1.7;white-space:pre-wrap}.ts{font-size:10px;color:#bbb;margin-top:6px;font-family:sans-serif}.ft{margin-top:36px;font-size:11px;color:#bbb;text-align:center;border-top:1px solid #eee;padding-top:16px}</style></head><body><h1>Adelani AI Chat</h1><h2>${agent.name} · ${agent.role}</h2>${msgs.map(m=>`<div class="m ${m.role==="user"?"u":"a"}"><div class="role">${m.role==="user"?"You":agent.name}</div><div class="txt">${m.content.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</div><div class="ts">${new Date(m.timestamp).toLocaleString()}</div></div>`).join("")}<div class="ft">Adelani AI Chat · ${new Date().toLocaleString()}</div></body></html>`;const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);}else showToast("Allow popups to export PDF.");};
+  const logout=()=>{ls.del("adelani-session");setUser(null);setGuest(false);setConvs({});setView("auth");};
+  const switchAgent=a=>{setAgent(a);if(mobile)setSideOpen(false);};
+
+  if(view==="loading") return <div style={{height:"100%",background:"#0A0A0B",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:26,background:"linear-gradient(135deg,#F0B429,#E05C2A)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div></div>;
+  if(view==="auth") return <AuthScreen onAuth={u=>{setUser(u);setGuest(false);setView("chat");}} onGuest={()=>{setGuest(true);setView("chat");}} t={t} dark={dark}/>;
+  if(view==="admin") return <AdminPanel onBack={()=>setView("chat")} t={t} dark={dark} themeKey={theme} toggleTheme={toggleTheme}/>;
+
+  const SideInner=()=>(
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      <div style={{padding:"20px 16px 13px",borderBottom:`1px solid ${t.border}`,flexShrink:0}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,background:"linear-gradient(135deg,#F0B429,#E05C2A)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
+        <div style={{fontSize:9,color:t.muted,marginTop:2,letterSpacing:"2.5px",textTransform:"uppercase",fontWeight:600}}>Multi-Agent Chat</div>
+      </div>
+      <div style={{padding:"9px 10px",borderBottom:`1px solid ${t.border}`,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:dark?"rgba(255,255,255,0.03)":"rgba(0,0,0,0.03)",border:`1px solid ${t.border}`}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,rgba(240,180,41,0.28),rgba(224,92,42,0.18))",border:"1.5px solid rgba(240,180,41,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#F0B429",fontSize:14,flexShrink:0}}>{isGuest?"G":user?.username?.[0]?.toUpperCase()||"U"}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:600,fontSize:13,color:t.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isGuest?"Guest User":user?.username}</div>
+            <div style={{fontSize:10,color:t.muted,marginTop:1}}>{isGuest?`${gLeft} msgs left today`:user?.activated?"✦ Premium · Unlimited":user?.role==="admin"?"⚙ Admin":"⏳ Pending Activation"}</div>
+          </div>
+          {user?.role==="admin"&&<button onClick={()=>{setView("admin");setSideOpen(false);}} style={{padding:"3px 8px",borderRadius:7,background:"rgba(240,180,41,0.14)",border:"1px solid rgba(240,180,41,0.3)",color:"#F0B429",fontSize:11,fontWeight:700}}>⚙</button>}
+        </div>
+        {user&&!user.activated&&user.role!=="admin"&&<div style={{marginTop:8,padding:"8px 11px",borderRadius:9,background:"rgba(255,159,47,0.08)",border:"1px solid rgba(255,159,47,0.2)",fontSize:11,color:"#FF9F2F",lineHeight:1.5}}>⏳ Awaiting admin activation for premium access.</div>}
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"9px 8px"}}>
+        <div style={{fontSize:9.5,color:t.muted,letterSpacing:"2.5px",textTransform:"uppercase",padding:"5px 8px 9px",fontWeight:700}}>AI Agents</div>
+        {AGENTS.map(a=>(
+          <div key={a.id} onClick={()=>switchAgent(a)} style={{padding:"10px 11px",borderRadius:12,marginBottom:3,cursor:"pointer",transition:"all 0.2s",background:agent.id===a.id?`${a.color}14`:"transparent",border:agent.id===a.id?`1px solid ${a.color}38`:`1px solid transparent`,display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:34,height:34,borderRadius:10,background:`linear-gradient(135deg,${a.color}26,${a.color}0E)`,border:`1px solid ${a.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:a.color,flexShrink:0,boxShadow:agent.id===a.id?`0 0 12px ${a.color}28`:"none"}}>{a.icon}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:13,color:agent.id===a.id?a.color:t.text}}>{a.name}</div>
+              <div style={{fontSize:10.5,color:t.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{a.role}</div>
+            </div>
+            {a.web&&<span style={{fontSize:9,color:a.color,background:`${a.color}1A`,padding:"2px 7px",borderRadius:10,border:`1px solid ${a.color}28`,flexShrink:0,fontWeight:700}}>LIVE</span>}
+            {agent.id===a.id&&<div style={{width:5,height:5,borderRadius:"50%",background:a.color,boxShadow:`0 0 8px ${a.color}`,flexShrink:0}}/>}
+          </div>
+        ))}
+      </div>
+      <div style={{padding:"10px 10px 14px",borderTop:`1px solid ${t.border}`,flexShrink:0}}>
+        <button onClick={logout} style={{width:"100%",padding:"9px",borderRadius:11,background:"transparent",border:`1px solid ${t.border}`,color:t.muted,fontSize:13}}>Sign Out</button>
+      </div>
+    </div>
+  );
+
+  return(
+    <>
+      <style>{`body{background:${t.bg}}.md code{background:${dark?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.06)"}}.md pre{background:${dark?"#0F0F11":"#F0EBE0"};border:1px solid ${t.border}}.md .mh1,.md .mh2,.md .mh3{color:${t.text}}textarea::placeholder{color:${t.dim}}input::placeholder{color:${t.dim}}::-webkit-scrollbar-thumb{background:${t.dim}}`}</style>
+      {/* Background orbs */}
+      {dark&&<>
+        <div style={{position:"fixed",top:"-25%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:`radial-gradient(circle,${agent.color}10,transparent 70%)`,pointerEvents:"none",zIndex:0,animation:"orb1 14s ease-in-out infinite"}}/>
+        <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(224,92,42,0.07),transparent 70%)",pointerEvents:"none",zIndex:0,animation:"orb2 18s ease-in-out infinite"}}/>
+      </>}
+
+      <div style={{display:"flex",height:"100%",position:"relative",overflow:"hidden"}}>
+        {/* Desktop sidebar */}
+        {!mobile&&<div style={{width:sideOpen?252:0,minWidth:sideOpen?252:0,transition:"all 0.3s cubic-bezier(0.4,0,0.2,1)",overflow:"hidden",borderRight:`1px solid ${t.border}`,background:dark?"rgba(10,10,11,0.96)":t.surf,flexShrink:0,zIndex:10}}>
+          <div style={{width:252,height:"100%"}}><SideInner/></div>
+        </div>}
+
+        {/* Mobile overlay */}
+        {mobile&&sideOpen&&<>
+          <div onClick={()=>setSideOpen(false)} style={{position:"fixed",inset:0,background:t.overlay,zIndex:40,animation:"fadeIn 0.2s ease"}}/>
+          <div style={{position:"fixed",top:0,left:0,width:"82%",maxWidth:300,height:"100%",background:dark?"rgba(10,10,11,0.98)":t.surf,zIndex:50,borderRight:`1px solid ${t.border}`,animation:"sideIn 0.28s ease",backdropFilter:"blur(20px)"}}>
+            <SideInner/>
+          </div>
+        </>}
+
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0,zIndex:1}}>
+          {/* Header */}
+          <div style={{padding:`0 ${mobile?"12px":"16px"}`,height:56,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${t.border}`,background:dark?"rgba(10,10,11,0.88)":t.surf,backdropFilter:"blur(20px)",flexShrink:0,zIndex:5}}>
+            <div style={{display:"flex",alignItems:"center",gap:mobile?8:11}}>
+              <button onClick={()=>setSideOpen(o=>!o)} style={{background:dark?"rgba(255,255,255,0.05)":t.inp,border:`1px solid ${t.border}`,borderRadius:9,width:35,height:35,display:"flex",alignItems:"center",justifyContent:"center",color:t.muted,fontSize:15}}>{mobile?(sideOpen?"✕":"☰"):(sideOpen?"←":"☰")}</button>
+              {mobile?<div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#F0B429,#E05C2A)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
+              :<><div style={{width:32,height:32,borderRadius:9,background:`${agent.color}1A`,border:`1.5px solid ${agent.color}38`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:agent.color,boxShadow:`0 0 12px ${agent.color}1E`}}>{agent.icon}</div>
+              <div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,color:t.text}}>{agent.name}</div><div style={{fontSize:10.5,color:t.muted}}>{agent.role}</div></div>
+              {agent.web&&<span style={{padding:"2px 9px",borderRadius:20,background:`${agent.color}14`,border:`1px solid ${agent.color}28`,fontSize:9.5,color:agent.color,fontWeight:700,letterSpacing:"1px"}}>● LIVE</span>}</>}
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {!mobile&&<>{AGENTS.map(a=><button key={a.id} onClick={()=>setAgent(a)} title={a.name} style={{width:29,height:29,borderRadius:8,background:agent.id===a.id?`${a.color}16`:dark?"rgba(255,255,255,0.03)":t.inp,border:agent.id===a.id?`1.5px solid ${a.color}38`:`1px solid ${t.border}`,color:a.color,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>{a.icon}</button>)}
+              <div style={{width:1,height:22,background:t.border}}/></>}
+              <button onClick={toggleTheme} style={{background:dark?"rgba(255,255,255,0.05)":t.inp,border:`1px solid ${t.border}`,borderRadius:9,width:35,height:35,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>{dark?"☀️":"🌙"}</button>
+              <button onClick={exportPDF} style={{background:dark?"rgba(255,255,255,0.05)":t.inp,border:`1px solid ${t.border}`,borderRadius:9,width:35,height:35,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:t.muted}}>📄</button>
+              {!mobile&&<button onClick={clearChat} style={{background:dark?"rgba(255,255,255,0.04)":t.inp,border:`1px solid ${t.border}`,borderRadius:9,padding:"0 12px",height:35,color:t.muted,fontSize:12.5}}>Clear</button>}
+            </div>
+          </div>
+
+          {/* Mobile agent bar */}
+          {mobile&&<div style={{padding:"6px 12px",borderBottom:`1px solid ${t.border}`,background:dark?"rgba(10,10,11,0.75)":t.surf,display:"flex",alignItems:"center",gap:8,backdropFilter:"blur(12px)",flexShrink:0}}>
+            <div style={{width:20,height:20,borderRadius:6,background:`${agent.color}1E`,border:`1px solid ${agent.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:agent.color,flexShrink:0}}>{agent.icon}</div>
+            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:12,color:agent.color}}>{agent.name}</span>
+            <span style={{fontSize:11,color:t.muted,flex:1}}>· {agent.role}</span>
+            {agent.web&&<span style={{fontSize:9,color:agent.color,fontWeight:700}}>LIVE</span>}
+            <button onClick={clearChat} style={{background:"transparent",border:`1px solid ${t.border}`,borderRadius:7,padding:"3px 9px",color:t.muted,fontSize:11}}>Clear</button>
+          </div>}
+
+          {/* Messages */}
+          <div style={{flex:1,overflowY:"auto",padding:`${mobile?"16px 13px 8px":"20px 22px 8px"}`,display:"flex",flexDirection:"column",WebkitOverflowScrolling:"touch"}}>
+            {msgs.length===0&&<div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"30px 16px",animation:"fup 0.5s ease",textAlign:"center"}}>
+              <div style={{width:68,height:68,borderRadius:20,background:`linear-gradient(135deg,${agent.color}26,${agent.color}0E)`,border:`2px solid ${agent.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,color:agent.color,marginBottom:18,boxShadow:`0 0 40px ${agent.color}22,0 0 0 8px ${agent.color}06`}}>{agent.icon}</div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:mobile?20:23,fontWeight:700,color:t.text,marginBottom:7,letterSpacing:"-0.5px"}}>Hello, I'm {agent.name}</div>
+              <div style={{fontSize:13.5,color:t.muted,maxWidth:300,lineHeight:1.65,marginBottom:22}}>{agent.role} · Powered by Adelani AI</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7,justifyContent:"center",maxWidth:420}}>
+                {[agent.id==="asha"?"What can you help me with?":null,agent.id==="scholar"?"Help me design a curriculum":null,agent.id==="bizna"?"African startup ideas in 2026":null,agent.id==="dawa"?"Daily habits for better health":null,agent.id==="ubuntu"?"Teach me a Yoruba proverb":null,agent.id==="nexus"?"What's trending in AI today?":null,"Explain something powerful","Help me think through an idea"].filter(Boolean).slice(0,4).map(p=>(
+                  <button key={p} onClick={()=>{setInput(p);taRef.current?.focus();}} style={{padding:"8px 14px",borderRadius:22,background:dark?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.04)",border:`1px solid ${agent.color}25`,color:t.muted,fontSize:12}}>{p}</button>
+                ))}
+              </div>
+            </div>}
+            {msgs.map((m,i)=><Bubble key={i} msg={m} agent={agent} t={t} dark={dark}/>)}
+            {busy&&<div style={{display:"flex",alignItems:"center",gap:9,marginBottom:14,animation:"fup 0.3s ease"}}>
+              <div style={{width:30,height:30,borderRadius:"50%",background:`${agent.color}18`,border:`1.5px solid ${agent.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:agent.color,flexShrink:0}}>{agent.icon}</div>
+              <div style={{background:t.bub,borderRadius:"17px 17px 17px 5px",border:`1px solid ${t.bubBrd}`}}><Dots color={agent.color}/></div>
+            </div>}
+            <div ref={botRef}/>
+          </div>
+
+          {/* Mobile bottom agent nav */}
+          {mobile&&<div style={{padding:"6px 10px",borderTop:`1px solid ${t.border}`,background:dark?"rgba(10,10,11,0.94)":t.surf,display:"flex",gap:4,overflowX:"auto",flexShrink:0,backdropFilter:"blur(16px)",WebkitOverflowScrolling:"touch"}}>
+            {AGENTS.map(a=><button key={a.id} onClick={()=>setAgent(a)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"5px 11px",borderRadius:11,background:agent.id===a.id?`${a.color}16`:"transparent",border:agent.id===a.id?`1.5px solid ${a.color}38`:"1px solid transparent",color:a.color,flexShrink:0,minWidth:50}}>
+              <span style={{fontSize:15}}>{a.icon}</span>
+              <span style={{fontSize:9,fontFamily:"'Syne',sans-serif",fontWeight:600,color:agent.id===a.id?a.color:t.muted,whiteSpace:"nowrap"}}>{a.name}</span>
+            </button>)}
+          </div>}
+
+          {/* Input area */}
+          <div style={{padding:`8px ${mobile?"10px":"16px"} max(12px,env(safe-area-inset-bottom))`,background:dark?"rgba(10,10,11,0.96)":t.surf,backdropFilter:"blur(20px)",borderTop:`1px solid ${t.border}`,flexShrink:0}}>
+            {isGuest&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,padding:"6px 11px",borderRadius:9,background:`${gLeft===0?"rgba(255,107,107,0.09)":"rgba(240,180,41,0.07)"}`,border:`1px solid ${gLeft===0?"rgba(255,107,107,0.25)":"rgba(240,180,41,0.22)"}`}}>
+              <span style={{fontSize:11.5,color:gLeft===0?"#FF6B6B":"#F0B429"}}>{gLeft===0?"Daily limit reached":""+gLeft+" free messages remaining today"}</span>
+              <button onClick={()=>setView("auth")} style={{fontSize:11,padding:"3px 9px",borderRadius:7,background:"transparent",border:`1px solid ${gLeft===0?"rgba(255,107,107,0.35)":"rgba(240,180,41,0.28)"}`,color:gLeft===0?"#FF6B6B":"#F0B429"}}>Register →</button>
+            </div>}
+            {user&&!user.activated&&user.role!=="admin"&&<div style={{marginBottom:8,padding:"6px 11px",borderRadius:9,background:"rgba(255,159,47,0.07)",border:"1px solid rgba(255,159,47,0.22)"}}>
+              <span style={{fontSize:11.5,color:"#FF9F2F"}}>⏳ Using free AI — awaiting admin activation for premium model</span>
+            </div>}
+            {imgP&&<div style={{marginBottom:7,position:"relative",display:"inline-block"}}>
+              <img src={imgP} style={{height:60,borderRadius:10,border:`1.5px solid ${agent.color}38`}} alt=""/>
+              <button onClick={()=>{setImg(null);setImgP(null);}} style={{position:"absolute",top:-8,right:-8,width:20,height:20,borderRadius:"50%",background:"#333",border:"none",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>}
+            <div style={{display:"flex",alignItems:"flex-end",gap:7,background:dark?"rgba(255,255,255,0.04)":t.inp,borderRadius:16,border:`1px solid ${input||img?agent.color+"40":t.border}`,padding:"8px 9px",transition:"border 0.25s,box-shadow 0.25s",boxShadow:input||img?`0 0 20px ${agent.glow}`:"none"}}>
+              <button onClick={()=>fileRef.current?.click()} style={{width:34,height:34,borderRadius:9,flexShrink:0,background:dark?"rgba(255,255,255,0.04)":t.card,border:`1px solid ${t.border}`,color:t.muted,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>📷</button>
+              <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleImg} style={{display:"none"}}/>
+              <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={onKey}
+                placeholder={agent.web?`Ask ${agent.name} to search...`:`Message ${agent.name}...`} rows={1}
+                style={{flex:1,color:t.text,fontSize:13.5,lineHeight:1.65,fontFamily:"'DM Sans',sans-serif",maxHeight:130,overflowY:"auto",paddingTop:4}}
+                onInput={e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,130)+"px";}}/>
+              <button onClick={toggleMic} style={{width:34,height:34,borderRadius:9,flexShrink:0,background:mic?`${agent.color}1E`:dark?"rgba(255,255,255,0.04)":t.card,border:mic?`1.5px solid ${agent.color}48`:`1px solid ${t.border}`,color:mic?agent.color:t.muted,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",animation:mic?"pulse 1.3s ease infinite":"none"}}>🎤</button>
+              <button onClick={send} disabled={busy||(!input.trim()&&!img)} style={{width:36,height:36,borderRadius:10,flexShrink:0,background:busy||(!input.trim()&&!img)?"transparent":`linear-gradient(135deg,${agent.color},${agent.color}BB)`,border:busy||(!input.trim()&&!img)?`1px solid ${t.border}`:"none",color:busy||(!input.trim()&&!img)?t.dim:"#0A0A0B",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:busy||(!input.trim()&&!img)?"none":`0 4px 16px ${agent.glow}`}}>
+                {busy?<div style={{width:14,height:14,border:`2px solid ${t.dim}`,borderTopColor:agent.color,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>:"↑"}
+              </button>
+            </div>
+            {!mobile&&<div style={{textAlign:"center",fontSize:9.5,color:t.dim,marginTop:6,letterSpacing:"0.5px",opacity:0.7}}>Adelani AI Chat · 6 Specialized Agents · Voice · Vision · Live Web</div>}
+          </div>
+        </div>
+
+        {toast&&<div style={{position:"fixed",bottom:mobile?90:24,left:"50%",background:dark?"rgba(18,18,20,0.95)":"rgba(255,255,255,0.95)",border:`1px solid ${t.border}`,borderRadius:10,padding:"9px 18px",fontSize:12.5,color:t.text,boxShadow:"0 8px 30px rgba(0,0,0,0.4)",zIndex:300,whiteSpace:"nowrap",backdropFilter:"blur(16px)",animation:"toastIn 0.3s ease",transform:"translateX(-50%)"}}>{toast}</div>}
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
