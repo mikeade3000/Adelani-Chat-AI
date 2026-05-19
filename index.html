@@ -417,7 +417,7 @@ function App(){
   const [mic,setMic]            = useState(false);
   const [img,setImg]            = useState(null);
   const [imgP,setImgP]          = useState(null);
-  const [sideOpen,setSideOpen]  = useState(false);
+  const [sideOpen,setSideOpen]  = useState(window.innerWidth>=720); // open by default on desktop
   const [toast,setToast]        = useState("");
   const [showLimit,setShowLimit]= useState(false);
   const [mobile,setMobile]      = useState(window.innerWidth<720);
