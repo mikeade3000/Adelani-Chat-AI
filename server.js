@@ -6,8 +6,6 @@ const fs         = require("fs");
 const path       = require("path");
 
 const app = express();
-
-// ── CORS ──────────────────────────────────────────────────────────────────────
 app.use(cors({ origin: "*", methods: ["GET","POST","OPTIONS"], allowedHeaders: ["Content-Type","Authorization"] }));
 app.use(express.json({ limit: "10mb" }));
 
@@ -19,34 +17,28 @@ const SITE_URL     = process.env.FRONTEND_URL   || "https://mikeade3000.github.i
 const ADMIN_SECRET = process.env.ADMIN_SECRET   || "adelani-admin-2024";
 const ADMIN_PASS   = process.env.ADMIN_PASSWORD || "adelani2024";
 const OR_API       = "https://openrouter.ai/api/v1/chat/completions";
-
-// ── Model ─────────────────────────────────────────────────────────────────────
-// Single premium model used for ALL users (guests, registered, admin).
-// The broken embedding model (nvidia/llama-nemotron-embed-vl-1b-v2:free)
-// has been removed — it cannot be used with the chat endpoint.
-const CHAT_MODEL = "meta-llama/llama-3.1-8b-instruct";
+const CHAT_MODEL   = "meta-llama/llama-3.1-8b-instruct"; // premium model for all users
 
 // ── User store ────────────────────────────────────────────────────────────────
 let users = {};
 const loadUsers = () => {
-  try { if (fs.existsSync(DATA_FILE)) users = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
+  try { if (fs.existsSync(DATA_FILE)) users = JSON.parse(fs.readFileSync(DATA_FILE,"utf8")); }
   catch(e) { users = {}; }
 };
 const saveUsers = () => {
-  try { fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2)); } catch(e) {}
+  try { fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2)); } catch(e){}
 };
 loadUsers();
 
 // ── Email ─────────────────────────────────────────────────────────────────────
-const mailer = () => nodemailer.createTransport({
-  service: "gmail",
-  auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
-});
-
 const sendEmail = async (subject, html) => {
-  if (!process.env.GMAIL_USER) { console.log("📧 Email skipped (no GMAIL_USER configured)"); return; }
+  if (!process.env.GMAIL_USER) { console.log("📧 Email skipped — no GMAIL_USER set"); return; }
   try {
-    await mailer().sendMail({ from: `"Adelani AI" <${process.env.GMAIL_USER}>`, to: ADMIN_EMAIL, subject, html });
+    const t = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
+    });
+    await t.sendMail({ from: `"Adelani AI" <${process.env.GMAIL_USER}>`, to: ADMIN_EMAIL, subject, html });
     console.log("📧 Sent:", subject);
   } catch(e) { console.error("📧 Failed:", e.message); }
 };
@@ -59,48 +51,57 @@ const regEmailHtml = (u, url) => `<!DOCTYPE html><html><head><meta charset="UTF-
     <div style="font-size:11px;letter-spacing:3px;color:#0A0A0B;opacity:0.75;margin-top:4px">NEW USER REGISTRATION</div>
   </div>
   <div style="background:#141416;border:1px solid #222;border-top:none;border-radius:0 0 16px 16px;padding:28px">
-    <h2 style="color:#F0B429;margin:0 0 20px;font-size:18px">A new user has registered ✨</h2>
+    <h2 style="color:#F0B429;margin:0 0 20px;font-size:18px">New user registered ✨</h2>
     <table style="width:100%;border-collapse:collapse">
       <tr style="border-bottom:1px solid #222"><td style="padding:10px 0;color:#666;font-size:13px;width:110px">Username</td><td style="padding:10px 0;color:#E8E0D5;font-weight:700">${u.username}</td></tr>
-      <tr style="border-bottom:1px solid #222"><td style="padding:10px 0;color:#666;font-size:13px">Email</td><td style="padding:10px 0;color:#E8E0D5">${u.email || "Not provided"}</td></tr>
+      <tr style="border-bottom:1px solid #222"><td style="padding:10px 0;color:#666;font-size:13px">Email</td><td style="padding:10px 0;color:#E8E0D5">${u.email||"Not provided"}</td></tr>
       <tr><td style="padding:10px 0;color:#666;font-size:13px">Date</td><td style="padding:10px 0;color:#888;font-size:13px">${new Date(u.createdAt).toUTCString()}</td></tr>
     </table>
     <div style="text-align:center;margin:28px 0">
       <a href="${url}" style="display:inline-block;padding:15px 36px;background:linear-gradient(135deg,#F0B429,#E05C2A);color:#0A0A0B;text-decoration:none;border-radius:12px;font-weight:800;font-size:15px">✅ Activate This User</a>
     </div>
-    <p style="color:#444;font-size:12px;text-align:center">Once activated, ${u.username} will have access to Adelani AI Chat.</p>
   </div>
-  <p style="color:#333;font-size:11px;text-align:center;margin-top:16px">Adelani AI Chat · <a href="${SITE_URL}" style="color:#F0B429">${SITE_URL}</a></p>
 </div></body></html>`;
 
-// ── Routes ────────────────────────────────────────────────────────────────────
-app.get("/", (_req, res) => res.json({ status: "🟢 Adelani AI Backend", version: "2.1.0", model: CHAT_MODEL, time: new Date().toISOString() }));
+// ── Health check ──────────────────────────────────────────────────────────────
+app.get("/", (_req, res) => res.json({
+  status: "🟢 Adelani AI Backend",
+  version: "2.1.0",
+  model: CHAT_MODEL,
+  time: new Date().toISOString()
+}));
 
-// Register
+// ── Register ──────────────────────────────────────────────────────────────────
 app.post("/api/register", async (req, res) => {
   const { username, email, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Username and password required." });
-  if (username === "admin")   return res.status(400).json({ error: "That username is reserved." });
-  if (password.length < 6)    return res.status(400).json({ error: "Password must be 6+ characters." });
-  if (users[username])        return res.status(409).json({ error: "Username already taken." });
+  if (!username || !password)  return res.status(400).json({ error: "Username and password required." });
+  if (username === "admin")    return res.status(400).json({ error: "That username is reserved." });
+  if (password.length < 6)     return res.status(400).json({ error: "Password must be at least 6 characters." });
+  if (users[username])         return res.status(409).json({ error: "Username already taken." });
 
   const token = crypto.randomBytes(32).toString("hex");
-  const user  = { id: crypto.randomUUID(), username, email: email || "", password, role: "user", activated: false, banned: false, activationToken: token, createdAt: new Date().toISOString(), msgCount: 0 };
+  const user  = {
+    id: crypto.randomUUID(), username, email: email || "",
+    password, role: "user", activated: false, banned: false,
+    activationToken: token, createdAt: new Date().toISOString(), msgCount: 0
+  };
   users[username] = user;
   saveUsers();
 
   const activationUrl = `${BACKEND_URL}/api/activate?token=${token}&u=${encodeURIComponent(username)}`;
-  await sendEmail(`🆕 New Registration: ${username} — Adelani AI Chat`, regEmailHtml(user, activationUrl));
-
-  res.json({ success: true, message: "Registration submitted! Awaiting admin activation." });
+  await sendEmail(`🆕 New Registration: ${username}`, regEmailHtml(user, activationUrl));
+  res.json({ success: true, message: "Registration submitted! You'll be notified once activated." });
 });
 
-// Login
+// ── Login ─────────────────────────────────────────────────────────────────────
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
-  if (username === "admin" && password === ADMIN_PASS)
-    return res.json({ id: "admin", username: "admin", role: "admin", activated: true, sessionToken: crypto.createHmac("sha256", ADMIN_SECRET).update("admin").digest("hex") });
-
+  if (username === "admin" && password === ADMIN_PASS) {
+    return res.json({
+      id: "admin", username: "admin", role: "admin", activated: true,
+      sessionToken: crypto.createHmac("sha256", ADMIN_SECRET).update("admin").digest("hex")
+    });
+  }
   const user = users[username];
   if (!user || user.password !== password) return res.status(401).json({ error: "Invalid username or password." });
   if (user.banned) return res.status(403).json({ error: "Account suspended. Contact admin." });
@@ -112,47 +113,40 @@ app.post("/api/login", (req, res) => {
   res.json({ id: user.id, username: user.username, email: user.email, role: user.role, activated: user.activated, sessionToken });
 });
 
-// Activate via email link
+// ── Email activation ──────────────────────────────────────────────────────────
 app.get("/api/activate", (req, res) => {
   const { token, u } = req.query;
   const user = users[decodeURIComponent(u || "")];
   if (!user || user.activationToken !== token)
-    return res.status(400).send(`<html><body style="background:#0A0A0B;color:#E8E0D5;font-family:sans-serif;text-align:center;padding:60px 20px"><h2 style="color:#FF6B6B">❌ Invalid or expired link.</h2></body></html>`);
+    return res.status(400).send("<html><body style='background:#0A0A0B;color:#E8E0D5;text-align:center;padding:60px;font-family:sans-serif'><h2 style='color:#FF6B6B'>❌ Invalid or expired link.</h2></body></html>");
   user.activated = true;
   saveUsers();
   res.send(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans&display=swap" rel="stylesheet">
-  <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0A0A0B;color:#E8E0D5;font-family:'DM Sans',sans-serif;padding:20px;text-align:center}.card{background:#141416;border:1px solid #222;border-radius:20px;padding:40px 28px;max-width:400px;width:100%}</style></head>
-  <body><div class="card">
-    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;background:linear-gradient(135deg,#F0B429,#E05C2A);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:24px">Adelani AI</div>
+  <style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0A0A0B;color:#E8E0D5;font-family:sans-serif;text-align:center;padding:20px}
+  .c{background:#141416;border:1px solid #222;border-radius:20px;padding:40px 28px;max-width:400px;width:100%}</style></head>
+  <body><div class="c">
     <div style="font-size:52px;margin-bottom:18px">🎉</div>
     <h2 style="color:#3ECF8E;font-size:22px;margin:0 0 10px">Account Activated!</h2>
-    <p style="color:#888"><strong style="color:#E8E0D5">${decodeURIComponent(u)}</strong> now has full access.</p>
-    <div style="display:inline-block;margin-top:18px;padding:8px 20px;border-radius:20px;background:#3ECF8E22;border:1px solid #3ECF8E44;color:#3ECF8E;font-size:13px;font-weight:600">✦ Access Granted</div>
+    <p style="color:#888"><strong style="color:#E8E0D5">${decodeURIComponent(u)}</strong> now has access to Adelani AI Chat.</p>
   </div></body></html>`);
 });
 
-// Check activation status
+// ── User status ───────────────────────────────────────────────────────────────
 app.get("/api/status/:username", (req, res) => {
   const user = users[req.params.username];
   if (!user) return res.status(404).json({ error: "Not found" });
   res.json({ activated: user.activated, banned: user.banned });
 });
 
-// ── Chat — proxies to OpenRouter ──────────────────────────────────────────────
-// Uses CHAT_MODEL for everyone: guests, registered users, and admin alike.
-// The model can also be overridden per-request via req.body.model (from frontend).
+// ── Chat ──────────────────────────────────────────────────────────────────────
 app.post("/api/chat", async (req, res) => {
-  const { messages, systemPrompt, sessionToken, username, model: requestedModel } = req.body;
+  const { messages, systemPrompt, sessionToken, username } = req.body;
   if (!messages?.length) return res.status(400).json({ error: "No messages provided." });
 
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "Server not configured (missing OPENROUTER_API_KEY)." });
+  if (!apiKey) return res.status(500).json({ error: "Server not configured — OPENROUTER_API_KEY missing." });
 
-  // Always use the premium model — honour frontend override if provided
-  const model = requestedModel || CHAT_MODEL;
-
-  // Track message count for registered users
+  // Track message count for logged-in users
   if (username && username !== "admin" && sessionToken) {
     const user = users[username];
     if (user && user.sessionToken === sessionToken && user.sessionExpiry > Date.now()) {
@@ -161,9 +155,7 @@ app.post("/api/chat", async (req, res) => {
     }
   }
 
-  const orMsgs = systemPrompt
-    ? [{ role: "system", content: systemPrompt }, ...messages]
-    : messages;
+  const orMsgs = systemPrompt ? [{ role: "system", content: systemPrompt }, ...messages] : messages;
 
   try {
     const r = await fetch(OR_API, {
@@ -174,21 +166,19 @@ app.post("/api/chat", async (req, res) => {
         "HTTP-Referer":  SITE_URL,
         "X-Title":       "Adelani AI Chat"
       },
-      body: JSON.stringify({ model, messages: orMsgs, max_tokens: 1024, temperature: 0.7 })
+      body: JSON.stringify({ model: CHAT_MODEL, messages: orMsgs, max_tokens: 1024, temperature: 0.7 })
     });
 
     const data = await r.json();
-
     if (data.error) {
       console.error("OpenRouter error:", data.error.message);
       return res.status(502).json({ error: data.error.message });
     }
-
     const reply = data.choices?.[0]?.message?.content || "No response generated.";
-    return res.json({ reply, model });
+    res.json({ reply, model: CHAT_MODEL });
 
   } catch(e) {
-    console.error("Chat fetch error:", e.message);
+    console.error("Chat error:", e.message);
     res.status(502).json({ error: e.message });
   }
 });
@@ -209,7 +199,7 @@ app.post("/api/admin/action", (req, res) => {
   if (secret !== ADMIN_SECRET) return res.status(403).json({ error: "Unauthorized" });
   if (action === "delete") { delete users[username]; saveUsers(); return res.json({ success: true }); }
   const user = users[username];
-  if (!user) return res.status(404).json({ error: "Not found" });
+  if (!user) return res.status(404).json({ error: "User not found" });
   if (action === "activate")   user.activated = true;
   if (action === "deactivate") user.activated = false;
   if (action === "ban")        user.banned    = true;
@@ -220,4 +210,9 @@ app.post("/api/admin/action", (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`\n🚀 Adelani AI Backend  •  port ${PORT}  •  model: ${CHAT_MODEL}\n`));
+app.listen(PORT, () => {
+  console.log(`\n🚀 Adelani AI Backend`);
+  console.log(`   Port  : ${PORT}`);
+  console.log(`   Model : ${CHAT_MODEL}`);
+  console.log(`   Site  : ${SITE_URL}\n`);
+});
