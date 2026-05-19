@@ -126,12 +126,8 @@ button{cursor:pointer;transition:all 0.2s ease}
 <script type="text/babel" data-presets="react">
 const {useState,useEffect,useRef} = React;
 
-/* ── Backend URL ──────────────────────────────────────────── */
+/* ── Backend URL (auth/admin only) ────────────────────────── */
 const BACKEND = "https://adelani-ai-backend.onrender.com";
-
-const DAILY_LIMIT = 10;
-const WA_NUMBER   = "2348115800375";
-const WA_LINK     = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent("Hello Dr. Adewusi, I would like to upgrade to Adelani AI Premium for unlimited access.")}`;
 
 /* ── LocalStorage helpers ─────────────────────────────────── */
 const ls={
@@ -468,7 +464,13 @@ function App(){
     const ses=ls.get("adelani-session")||{};
     try{
       const r=await fetch(`${BACKEND}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({messages:hist.map(m=>({role:m.role,content:m.content})),systemPrompt:agent.system,username:ses.username||null,sessionToken:ses.sessionToken||null})});
+        body:JSON.stringify({
+          messages:hist.map(m=>({role:m.role,content:m.content})),
+          systemPrompt:agent.system,
+          model:"meta-llama/llama-3.1-8b-instruct",
+          username:ses.username||null,
+          sessionToken:ses.sessionToken||null
+        })});
       const d=await r.json();
       const reply=d.reply||(d.error?`⚠️ ${d.error}`:"No response.");
       setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:reply,timestamp:new Date().toISOString()}]}));
