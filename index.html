@@ -148,8 +148,8 @@ const AGENTS=[
 ];
 
 /* ── Daily limit helpers ─────────────────────────────────── */
-const getDailyUsage   = ()=> ls.get(`adelani-daily-${today()}`) || {count:0};
-const incrementUsage  = ()=>{ const u=getDailyUsage(); ls.set(`adelani-daily-${today()}`,{count:u.count+1}); };
+const getDailyUsage   = ()=> ls.get(`adl2-${today()}`) || {count:0};
+const incrementUsage  = ()=>{ const u=getDailyUsage(); ls.set(`adl2-${today()}`,{count:u.count+1}); };
 const isLimitReached  = ()=> getDailyUsage().count >= DAILY_LIMIT;
 
 /* ── Rotating Globe ──────────────────────────────────────── */
@@ -439,35 +439,45 @@ function App(){
   useEffect(()=>{if(!msgs.length)return;const k=user?`adelani-m-${user.id}-${agent.id}`:`adelani-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,agent.id,user?.id]);
   useEffect(()=>{botRef.current?.scrollIntoView({behavior:"smooth"});},[msgs,busy]);
 
-  const send=async()=>{
-    const text=input.trim(); if(!text&&!img)return;
-    if(user?.role!=="admin"){ if(isLimitReached()){setShowLimit(true);return;} }
+  const doSend=async()=>{
+    const text=input.trim();
+    if(!text&&!img) return;
+    if(busy) return;
+    /* Daily limit check */
+    if(user?.role!=="admin"){
+      if(isLimitReached()){ setShowLimit(true); return; }
+    }
+    /* Immediate UI update */
     const um={role:"user",content:text||"Describe this image.",image:img,timestamp:new Date().toISOString()};
     const hist=[...msgs,um];
     setConvs(p=>({...p,[agent.id]:hist}));
-    setInput("");setImg(null);setImgP(null);setBusy(true);
-    if(taRef.current)taRef.current.style.height="auto";
+    setInput(""); setImg(null); setImgP(null); setBusy(true);
+    if(taRef.current){ taRef.current.style.height="auto"; }
     if(user?.role!=="admin") incrementUsage();
     const ses=ls.get("adelani-session")||{};
     try{
-      const r=await fetch(`${BACKEND}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},
+      const r=await fetch(BACKEND+"/api/chat",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           messages:hist.map(m=>({role:m.role,content:m.content})),
           systemPrompt:agent.system,
           model:"meta-llama/llama-3.1-8b-instruct",
           username:ses.username||null,
           sessionToken:ses.sessionToken||null
-        })});
+        })
+      });
       const d=await r.json();
-      const reply=d.reply||(d.error?`⚠️ ${d.error}`:"No response.");
+      const reply=d.reply||(d.error?"⚠️ "+d.error:"No response.");
       setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:reply,timestamp:new Date().toISOString()}]}));
     }catch(e){
-      setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:`⚠️ Cannot reach backend.\n\nError: ${e.message}`,timestamp:new Date().toISOString()}]}));
+      setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:"⚠️ Cannot reach server. Is the backend running?\n"+e.message,timestamp:new Date().toISOString()}]}));
     }
     setBusy(false);
   };
+  const send=doSend;
 
-  const onKey=e=>{if(e.key==="Enter"&&!e.shiftKey&&!mobile){e.preventDefault();send();}};
+  const onKey=e=>{if(e.key==="Enter"&&!e.shiftKey&&!mobile){e.preventDefault();doSend();}};
   const toggleMic=()=>{
     if(mic){recRef.current?.stop();setMic(false);return;}
     const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -646,16 +656,25 @@ function App(){
               <button onClick={()=>{setImg(null);setImgP(null);}} style={{position:"absolute",top:-8,right:-8,width:21,height:21,borderRadius:"50%",background:"#888",border:"none",color:"#fff",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
             </div>}
             <div style={{display:"flex",alignItems:"flex-end",gap:8,background:t.inp,borderRadius:17,border:`1.5px solid ${input||img?agent.color+"50":t.border}`,padding:"9px 10px",transition:"border 0.25s,box-shadow 0.25s",boxShadow:input||img?`0 0 18px ${agent.glow}`:"none"}}>
-              <button onClick={()=>fileRef.current?.click()} style={{width:36,height:36,borderRadius:10,flexShrink:0,cursor:"pointer",background:t.card,border:`1px solid ${t.border}`,color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>📷</button>
+              <button onPointerDown={()=>fileRef.current?.click()} style={{width:36,height:36,borderRadius:10,flexShrink:0,cursor:"pointer",background:t.card,border:`1px solid ${t.border}`,color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>📷</button>
               <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleImg} style={{display:"none"}}/>
               <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={onKey}
                 placeholder={agent.web?`Ask ${agent.name} to search...`:`Message ${agent.name}...`} rows={1}
                 style={{flex:1,color:t.text,fontSize:15.5,lineHeight:1.7,fontFamily:"'DM Sans',sans-serif",maxHeight:140,overflowY:"auto",paddingTop:4}}
                 onInput={e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,140)+"px";}}/>
-              <button onClick={toggleMic} style={{width:36,height:36,borderRadius:10,flexShrink:0,background:mic?`${agent.color}18`:t.card,border:mic?`1.5px solid ${agent.color}45`:`1px solid ${t.border}`,color:mic?agent.color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",animation:mic?"pulse 1.3s ease infinite":"none"}}>🎤</button>
-              <button onClick={send} disabled={busy||(!input.trim()&&!img)}
-                style={{width:38,height:38,borderRadius:11,flexShrink:0,cursor:busy?"wait":"pointer",background:busy||(!input.trim()&&!img)?"transparent":`linear-gradient(135deg,${agent.color},${agent.color}CC)`,border:busy||(!input.trim()&&!img)?`1px solid ${t.border}`:"none",color:busy||(!input.trim()&&!img)?t.dim:"#FFF",fontSize:19,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:busy||(!input.trim()&&!img)?"none":`0 4px 16px ${agent.glow}`}}>
-                {busy?<div style={{width:15,height:15,border:`2px solid ${t.dim}`,borderTopColor:agent.color,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>:"↑"}
+              <button onPointerDown={toggleMic} style={{width:36,height:36,borderRadius:10,flexShrink:0,background:mic?`${agent.color}18`:t.card,border:mic?`1.5px solid ${agent.color}45`:`1px solid ${t.border}`,color:mic?agent.color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",animation:mic?"pulse 1.3s ease infinite":"none"}}>🎤</button>
+              <button type="button"
+                onPointerDown={()=>doSend()}
+                style={{width:38,height:38,borderRadius:11,flexShrink:0,
+                  cursor:busy?"wait":"pointer",
+                  opacity:(busy||(!input.trim()&&!img))?0.38:1,
+                  background:`linear-gradient(135deg,${agent.color},${agent.color}CC)`,
+                  border:"none",color:"#FFF",fontSize:19,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  boxShadow:`0 4px 16px ${agent.glow}`}}>
+                {busy
+                  ?<div style={{width:15,height:15,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#FFF",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                  :"↑"}
               </button>
             </div>
             {!mobile&&<div style={{textAlign:"center",fontSize:11,color:t.dim,marginTop:7,opacity:0.7}}>Adelani AI Chat · 6 Specialized Agents · Voice · Vision · Live Web</div>}
