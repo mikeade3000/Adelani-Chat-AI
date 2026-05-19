@@ -2,24 +2,20 @@ services:
   - type: web
     name: adelani-ai-backend
     env: node
-    region: oregon
-    plan: free
     buildCommand: npm install
     startCommand: node server.js
     envVars:
-      - key: MONGODB_URI
-        sync: false
-      - key: JWT_SECRET
-        generateValue: true
-      - key: ADMIN_PASSWORD
-        sync: false
       - key: OPENROUTER_API_KEY
         sync: false
-      - key: EMAIL_USER
+      - key: ADMIN_PASSWORD
+        value: adelani2024
+      - key: ADMIN_SECRET
+        value: adelani-admin-2024
+      - key: GMAIL_USER
         sync: false
-      - key: EMAIL_PASS
+      - key: GMAIL_APP_PASSWORD
         sync: false
-      - key: ADMIN_EMAIL
-        value: mikeade3000@yahoo.com
-      - key: SITE_URL
-        sync: false
+      - key: FRONTEND_URL
+        value: https://mikeade3000.github.io/Adelani-Chat-AI
+      - key: BACKEND_URL
+        value: https://adelani-ai-backend.onrender.com
