@@ -104,13 +104,7 @@ button{cursor:pointer;transition:all 0.2s ease}
     } else { _devOpen = false; }
   })();
 
-  /* 5 ── Disable console (optional soft block) */
-  try{
-    Object.defineProperty(window,'console',{
-      get:function(){ return {log:function(){},warn:function(){},error:function(){},dir:function(){},table:function(){},clear:function(){}}; },
-      configurable:false
-    });
-  }catch(e){}
+  /* 5 ── Console: leave intact so React can report errors correctly */
 
 })();
 </script>
@@ -646,13 +640,13 @@ function App(){
           </div>}
 
           {/* Input area */}
-          <div style={{padding:`8px ${mobile?"11px":"18px"} max(13px,env(safe-area-inset-bottom))`,background:t.surf,backdropFilter:"blur(20px)",borderTop:`1px solid ${t.border}`,flexShrink:0}}>
+          <div style={{padding:`8px ${mobile?"11px":"18px"} max(13px,env(safe-area-inset-bottom))`,background:t.surf,backdropFilter:"blur(20px)",borderTop:`1px solid ${t.border}`,flexShrink:0,position:"relative",zIndex:10}}>
             {imgP&&<div style={{marginBottom:8,position:"relative",display:"inline-block"}}>
               <img src={imgP} style={{height:64,borderRadius:11,border:`1.5px solid ${agent.color}38`}} alt=""/>
               <button onClick={()=>{setImg(null);setImgP(null);}} style={{position:"absolute",top:-8,right:-8,width:21,height:21,borderRadius:"50%",background:"#888",border:"none",color:"#fff",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
             </div>}
             <div style={{display:"flex",alignItems:"flex-end",gap:8,background:t.inp,borderRadius:17,border:`1.5px solid ${input||img?agent.color+"50":t.border}`,padding:"9px 10px",transition:"border 0.25s,box-shadow 0.25s",boxShadow:input||img?`0 0 18px ${agent.glow}`:"none"}}>
-              <button onClick={()=>fileRef.current?.click()} style={{width:36,height:36,borderRadius:10,flexShrink:0,background:t.card,border:`1px solid ${t.border}`,color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>📷</button>
+              <button onClick={()=>fileRef.current?.click()} style={{width:36,height:36,borderRadius:10,flexShrink:0,cursor:"pointer",background:t.card,border:`1px solid ${t.border}`,color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>📷</button>
               <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleImg} style={{display:"none"}}/>
               <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={onKey}
                 placeholder={agent.web?`Ask ${agent.name} to search...`:`Message ${agent.name}...`} rows={1}
@@ -660,7 +654,7 @@ function App(){
                 onInput={e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,140)+"px";}}/>
               <button onClick={toggleMic} style={{width:36,height:36,borderRadius:10,flexShrink:0,background:mic?`${agent.color}18`:t.card,border:mic?`1.5px solid ${agent.color}45`:`1px solid ${t.border}`,color:mic?agent.color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",animation:mic?"pulse 1.3s ease infinite":"none"}}>🎤</button>
               <button onClick={send} disabled={busy||(!input.trim()&&!img)}
-                style={{width:38,height:38,borderRadius:11,flexShrink:0,background:busy||(!input.trim()&&!img)?"transparent":`linear-gradient(135deg,${agent.color},${agent.color}CC)`,border:busy||(!input.trim()&&!img)?`1px solid ${t.border}`:"none",color:busy||(!input.trim()&&!img)?t.dim:"#FFF",fontSize:19,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:busy||(!input.trim()&&!img)?"none":`0 4px 16px ${agent.glow}`}}>
+                style={{width:38,height:38,borderRadius:11,flexShrink:0,cursor:busy?"wait":"pointer",background:busy||(!input.trim()&&!img)?"transparent":`linear-gradient(135deg,${agent.color},${agent.color}CC)`,border:busy||(!input.trim()&&!img)?`1px solid ${t.border}`:"none",color:busy||(!input.trim()&&!img)?t.dim:"#FFF",fontSize:19,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:busy||(!input.trim()&&!img)?"none":`0 4px 16px ${agent.glow}`}}>
                 {busy?<div style={{width:15,height:15,border:`2px solid ${t.dim}`,borderTopColor:agent.color,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>:"↑"}
               </button>
             </div>
