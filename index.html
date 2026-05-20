@@ -481,30 +481,65 @@ function App() {
     if(user?.role!=="admin") bumpUsage();
 
     const ses = ls.get("adl-ses")||{};
-    try {
-      const r = await fetch(BACKEND+"/api/chat", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          messages: hist.map(m=> m.image ? {
-            role: m.role,
-            content: [
-              {type:"text", text: m.content || "Please analyse and describe this image in detail."},
-              {type:"image_url", image_url:{url:"data:image/jpeg;base64,"+m.image, detail:"high"}}
-            ]
-          } : {role:m.role, content:m.content}),
-          systemPrompt: agent.system,
-          model: "meta-llama/llama-3.1-8b-instruct",
-          hasImage: hist.some(m=>m.image),
-          username: ses.username||null,
-          sessionToken: ses.sessionToken||null
-        })
-      });
-      const d = await r.json();
-      const reply = d.reply || (d.error ? "⚠️ "+d.error : "No response.");
-      setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:reply,timestamp:new Date().toISOString()}]}));
-    } catch(e) {
-      setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:"⚠️ Cannot reach server. The backend may be waking up — please try again in a moment.\n\n"+e.message,timestamp:new Date().toISOString()}]}));
+
+    /* Auto-retry for Render cold start (free tier sleeps after 15 min) */
+    const payload = {
+      messages: hist.map(m=> m.image ? {
+        role: m.role,
+        content: [
+          {type:"text", text: m.content || "Please analyse and describe this image in detail."},
+          {type:"image_url", image_url:{url:"data:image/jpeg;base64,"+m.image, detail:"high"}}
+        ]
+      } : {role:m.role, content:m.content}),
+      systemPrompt: agent.system,
+      model: "meta-llama/llama-3.1-8b-instruct",
+      hasImage: hist.some(m=>m.image),
+      username: ses.username||null,
+      sessionToken: ses.sessionToken||null
+    };
+
+    const MAX_WAIT   = 75000; // 75 seconds max (Render cold start ~60s)
+    const RETRY_GAP  = 6000;  // retry every 6 seconds
+    const started    = Date.now();
+    let   reply      = null;
+    let   lastErr    = "";
+    let   attempt    = 0;
+
+    while (Date.now() - started < MAX_WAIT) {
+      attempt++;
+      try {
+        const r = await fetch(BACKEND+"/api/chat", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        });
+        const d = await r.json();
+        reply = d.reply || (d.error ? "⚠️ "+d.error : "No response.");
+        break; // success — exit retry loop
+      } catch(e) {
+        lastErr = e.message;
+        if (attempt === 1) {
+          // Show "waking up" message on first failure
+          setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",
+            content:"⏳ Server is waking up, please wait a moment...",
+            timestamp:new Date().toISOString()}]}));
+        }
+        if (Date.now() - started + RETRY_GAP < MAX_WAIT) {
+          await new Promise(res => setTimeout(res, RETRY_GAP));
+        } else break;
+      }
+    }
+
+    if (reply) {
+      // Replace the "waking up" placeholder with the real reply
+      setConvs(p=>({...p,[agent.id]:[
+        ...hist,
+        {role:"assistant",content:reply,timestamp:new Date().toISOString()}
+      ]}));
+    } else {
+      setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",
+        content:"⚠️ Cannot reach server after "+Math.round((Date.now()-started)/1000)+"s.\n\nPlease check:\n• Your Render backend is running\n• OPENROUTER_API_KEY is set in Render environment variables\n• Backend URL is: "+BACKEND,
+        timestamp:new Date().toISOString()}]}));
     }
     setBusy(false);
   }, [input, img, busy, msgs, agent, user]);
