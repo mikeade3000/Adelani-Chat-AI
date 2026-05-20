@@ -17,7 +17,8 @@ const SITE_URL     = process.env.FRONTEND_URL   || "https://mikeade3000.github.i
 const ADMIN_SECRET = process.env.ADMIN_SECRET   || "adelani-admin-2024";
 const ADMIN_PASS   = process.env.ADMIN_PASSWORD || "adelani2024";
 const OR_API       = "https://openrouter.ai/api/v1/chat/completions";
-const CHAT_MODEL   = "meta-llama/llama-3.1-8b-instruct"; // premium model for all users
+const CHAT_MODEL   = "meta-llama/llama-3.1-8b-instruct"; // text model
+const VISION_MODEL  = "meta-llama/llama-3.2-11b-vision-instruct:free"; // image analysis
 
 // ── User store ────────────────────────────────────────────────────────────────
 let users = {};
@@ -140,7 +141,7 @@ app.get("/api/status/:username", (req, res) => {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 app.post("/api/chat", async (req, res) => {
-  const { messages, systemPrompt, sessionToken, username } = req.body;
+  const { messages, systemPrompt, sessionToken, username, hasImage } = req.body;
   if (!messages?.length) return res.status(400).json({ error: "No messages provided." });
 
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -157,30 +158,43 @@ app.post("/api/chat", async (req, res) => {
 
   const orMsgs = systemPrompt ? [{ role: "system", content: systemPrompt }, ...messages] : messages;
 
-  try {
-    const r = await fetch(OR_API, {
-      method:  "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type":  "application/json",
-        "HTTP-Referer":  SITE_URL,
-        "X-Title":       "Adelani AI Chat"
-      },
-      body: JSON.stringify({ model: CHAT_MODEL, messages: orMsgs, max_tokens: 1024, temperature: 0.7 })
-    });
+  // Choose model — switch to vision-capable model when an image is attached
+  const useVision = hasImage || messages.some(m => Array.isArray(m.content));
+  const modelList = useVision ? [VISION_MODEL] : [CHAT_MODEL];
 
-    const data = await r.json();
-    if (data.error) {
-      console.error("OpenRouter error:", data.error.message);
-      return res.status(502).json({ error: data.error.message });
+  let lastErr = "";
+  for (const model of modelList) {
+    try {
+      console.log(`→ Using model: ${model}${useVision?" [vision]":""}`);
+      const r = await fetch(OR_API, {
+        method:  "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type":  "application/json",
+          "HTTP-Referer":  SITE_URL,
+          "X-Title":       "Adelani AI Chat"
+        },
+        body: JSON.stringify({ model, messages: orMsgs, max_tokens: 1500, temperature: 0.7 })
+      });
+
+      const data = await r.json();
+      if (data.error) {
+        lastErr = data.error.message;
+        console.warn(`✗ ${model}:`, lastErr);
+        continue; // try next model
+      }
+      const reply = data.choices?.[0]?.message?.content || "No response generated.";
+      console.log(`✓ Reply from ${model}`);
+      return res.json({ reply, model });
+
+    } catch(e) {
+      lastErr = e.message;
+      console.warn(`✗ ${model} (network):`, lastErr);
     }
-    const reply = data.choices?.[0]?.message?.content || "No response generated.";
-    res.json({ reply, model: CHAT_MODEL });
-
-  } catch(e) {
-    console.error("Chat error:", e.message);
-    res.status(502).json({ error: e.message });
   }
+
+  // All models failed
+  res.status(502).json({ error: lastErr || "All models failed." });
 });
 
 // ── Admin: list users ─────────────────────────────────────────────────────────
