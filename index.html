@@ -486,9 +486,16 @@ function App() {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
-          messages: hist.map(m=>({role:m.role,content:m.content})),
+          messages: hist.map(m=> m.image ? {
+            role: m.role,
+            content: [
+              {type:"text", text: m.content || "Please analyse and describe this image in detail."},
+              {type:"image_url", image_url:{url:"data:image/jpeg;base64,"+m.image, detail:"high"}}
+            ]
+          } : {role:m.role, content:m.content}),
           systemPrompt: agent.system,
           model: "meta-llama/llama-3.1-8b-instruct",
+          hasImage: hist.some(m=>m.image),
           username: ses.username||null,
           sessionToken: ses.sessionToken||null
         })
@@ -665,7 +672,7 @@ function App() {
             {/* Camera */}
             <button type="button" onPointerDown={()=>fileRef.current?.click()}
               style={{width:35,height:35,borderRadius:9,flexShrink:0,background:t.card,border:`1px solid ${t.border}`,color:t.muted,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>📷</button>
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleImg} style={{display:"none"}}/>
+            <input ref={fileRef} type="file" accept="image/*,image/heic,image/heif" onChange={handleImg} style={{display:"none"}}/>
 
             {/* Textarea */}
             <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)}
