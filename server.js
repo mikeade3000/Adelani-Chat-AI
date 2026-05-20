@@ -18,7 +18,12 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET   || "adelani-admin-2024";
 const ADMIN_PASS   = process.env.ADMIN_PASSWORD || "adelani2024";
 const OR_API       = "https://openrouter.ai/api/v1/chat/completions";
 const CHAT_MODEL   = "meta-llama/llama-3.1-8b-instruct"; // text model
-const VISION_MODEL  = "meta-llama/llama-3.2-11b-vision-instruct:free"; // image analysis
+const VISION_MODELS = [
+  "qwen/qwen-2-vl-7b-instruct:free",          // Qwen VL — free, reliable vision
+  "google/gemini-2.0-flash-exp:free",          // Gemini — free, excellent vision
+  "meta-llama/llama-3.2-90b-vision-instruct:free", // Llama 90B vision — free fallback
+  "meta-llama/llama-3.2-11b-vision-instruct:free", // Llama 11B — last resort
+];
 
 // ── User store ────────────────────────────────────────────────────────────────
 let users = {};
@@ -160,7 +165,7 @@ app.post("/api/chat", async (req, res) => {
 
   // Choose model — switch to vision-capable model when an image is attached
   const useVision = hasImage || messages.some(m => Array.isArray(m.content));
-  const modelList = useVision ? [VISION_MODEL] : [CHAT_MODEL];
+  const modelList = useVision ? VISION_MODELS : [CHAT_MODEL];
 
   let lastErr = "";
   for (const model of modelList) {
