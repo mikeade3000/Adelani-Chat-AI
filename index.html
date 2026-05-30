@@ -323,6 +323,89 @@ function FileCard({name,icon,size,ext,color,dark,t,small}){
   );
 }
 
+/* ══════════ WHATS NEW MODAL (shows once per version) ══════════ */
+const WHATS_NEW_KEY = "adl-seen-v4"; // bumped — forces all existing users to see it
+
+function WhatsNewModal({t,dark,onClose}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.82)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeIn .25s ease"}}
+         onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:dark?"#111113":t.card,borderRadius:26,border:`1px solid ${t.border}`,maxWidth:420,width:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 40px 100px rgba(0,0,0,.6)",animation:"popIn .35s cubic-bezier(0.34,1.56,0.64,1)"}}>
+
+        {/* Header */}
+        <div style={{background:"linear-gradient(135deg,#D4900A,#C05020)",padding:"24px 24px 20px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+            <span style={{fontSize:28}}>🚀</span>
+            <div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:19,color:"#FFF",letterSpacing:"-.3px"}}>What's New in Adelani AI</div>
+              <div style={{fontSize:11.5,color:"rgba(255,255,255,.75)",marginTop:2,letterSpacing:"1px"}}>NEW UPDATE — FILE INTELLIGENCE</div>
+            </div>
+          </div>
+          <div style={{fontSize:13.5,color:"rgba(255,255,255,.88)",lineHeight:1.6}}>
+            You can now upload and analyse documents, spreadsheets, presentations, images and more — directly in the chat!
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{overflowY:"auto",padding:"18px 22px 22px",flex:1}}>
+
+          {/* Feature groups */}
+          {[
+            {
+              icon:"📄",label:"Documents",color:"#2980B9",
+              items:["PDF files (up to 25 pages)","Word (.docx / .doc)","ODT documents"]
+            },
+            {
+              icon:"📊",label:"Data & Spreadsheets",color:"#27AE60",
+              items:["Excel (.xlsx / .xls) — all sheets","CSV data files","PowerPoint (.pptx) — all slides"]
+            },
+            {
+              icon:"🖼️",label:"Images",color:"#8E44AD",
+              items:["JPG, PNG, GIF, WebP, TIFF","SVG graphics","Full AI vision analysis"]
+            },
+          ].map(g=>(
+            <div key={g.label} style={{marginBottom:14,padding:"12px 14px",borderRadius:13,background:dark?"rgba(255,255,255,.04)":"rgba(0,0,0,.03)",border:`1px solid ${t.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <span style={{fontSize:18}}>{g.icon}</span>
+                <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13.5,color:g.color}}>{g.label}</span>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {g.items.map(item=>(
+                  <span key={item} style={{fontSize:12,padding:"3px 9px",borderRadius:20,background:`${g.color}14`,border:`1px solid ${g.color}28`,color:dark?g.color:g.color}}>{item}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* How to use */}
+          <div style={{padding:"12px 14px",borderRadius:13,background:dark?"rgba(212,144,10,.07)":"rgba(212,144,10,.06)",border:"1px solid rgba(212,144,10,.25)",marginBottom:16}}>
+            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:"#D4900A",marginBottom:8}}>How to use</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {[
+                ["📎","Tap the paperclip button in the chat input"],
+                ["📁","Select any supported file from your device"],
+                ["💬","Type your question or just press send"],
+                ["🤖","Any of the 6 agents will read & analyse the file"],
+              ].map(([icon,text])=>(
+                <div key={text} style={{display:"flex",gap:9,alignItems:"flex-start"}}>
+                  <span style={{fontSize:15,flexShrink:0}}>{icon}</span>
+                  <span style={{fontSize:13,color:t.muted,lineHeight:1.55}}>{text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dismiss button */}
+          <button onPointerDown={onClose}
+            style={{width:"100%",padding:"13px",borderRadius:13,background:"linear-gradient(135deg,#D4900A,#C05020)",border:"none",color:"#FFF",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(212,144,10,.35)"}}>
+            Got it, let's go! →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════ LIMIT MODAL ══════════ */
 function LimitModal({t,dark,onClose}){
   return(
@@ -586,6 +669,7 @@ function App(){
   const [processing,setProcessing] = useState(false); // file being processed
   const [sideOpen,setSide]       = useState(window.innerWidth>=720);
   const [showLimit,setShowLimit] = useState(false);
+  const [showWhatsNew,setShowWhatsNew] = useState(false);
   const [toast,setToast]         = useState("");
   const [mobile,setMobile]       = useState(window.innerWidth<720);
 
@@ -598,6 +682,8 @@ function App(){
     const ses=ls.get("adl-ses");
     if(ses&&ses.expiresAt>Date.now()){setUser(ses);setView("chat");}
     else setView("auth");
+    // Show what's new once per version
+    if(!ls.get(WHATS_NEW_KEY)) setShowWhatsNew(true);
   },[]);
   useEffect(()=>{const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;const r=ls.get(k);if(r)setConvs(p=>({...p,[agent.id]:r}));},[agent.id,user?.id]);
   useEffect(()=>{if(!msgs.length)return;const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,agent.id,user?.id]);
@@ -738,6 +824,7 @@ function App(){
   return(
     <>
     <style>{`body,#root{background:${t.bg}} .md code{background:${dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.06)"}} .md pre{background:${dark?"#0F0F11":"#EDE8DF"};border:1px solid ${t.border}} .md .h1,.md .h2,.md .h3{color:${t.text}} textarea::placeholder,input::placeholder{color:${t.dim}}`}</style>
+    {showWhatsNew&&<WhatsNewModal t={t} dark={dark} onClose={()=>{ls.set(WHATS_NEW_KEY,true);setShowWhatsNew(false);}}/>}
     {showLimit&&<LimitModal t={t} dark={dark} onClose={()=>setShowLimit(false)}/>}
     <div style={{position:"fixed",top:"-25%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:`radial-gradient(circle,${agent.color}0A,transparent 70%)`,pointerEvents:"none",zIndex:0,animation:"orb1 14s ease-in-out infinite"}}/>
     <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(192,80,32,.05),transparent 70%)",pointerEvents:"none",zIndex:0,animation:"orb2 18s ease-in-out infinite"}}/>
@@ -893,7 +980,7 @@ function App(){
 
           {!mobile&&(
             <div style={{textAlign:"center",fontSize:11,color:t.dim,marginTop:6,opacity:.65}}>
-              Adelani AI · 6 Agents · PDF · Word · Excel · PowerPoint · CSV · Images · Voice
+              Adelani AI · 6 Agents · PDF · Word · Excel · PowerPoint · CSV · Images · Voice · Powered by ADELANI AI
             </div>
           )}
         </div>
