@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Adelani AI</title>
+<!-- Office.js MUST be first -->
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#F9F6EF;color:#1A1208;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#D0C8BC;border-radius:3px}
+button{cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
+button:active{transform:scale(0.97)}
+textarea,input{font-family:'DM Sans',sans-serif;outline:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── Header ── */
+.header{
+  background:linear-gradient(135deg,#D4900A,#C05020);
+  padding:12px 14px 10px;
+  flex-shrink:0;
+}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.brand{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;color:#FFF;letter-spacing:-.3px}
+.app-badge{
+  padding:3px 9px;border-radius:20px;
+  background:rgba(255,255,255,.22);
+  font-size:11px;color:#FFF;font-weight:600;
+  border:1px solid rgba(255,255,255,.3);
+}
+.agent-tabs{display:flex;gap:4px;overflow-x:auto;padding-bottom:2px}
+.agent-tabs::-webkit-scrollbar{height:0}
+.agent-tab{
+  padding:4px 10px;border-radius:20px;border:1.5px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.12);color:rgba(255,255,255,.85);
+  font-size:11.5px;font-weight:600;white-space:nowrap;flex-shrink:0;
+}
+.agent-tab.active{background:#FFF;color:#D4900A;border-color:#FFF;}
+
+/* ── Actions bar ── */
+.actions{
+  display:flex;gap:6px;padding:10px 12px;
+  border-bottom:1px solid #E8E2D8;background:#FBF8F2;
+  flex-shrink:0;flex-wrap:wrap;
+}
+.act-btn{
+  flex:1;min-width:100px;padding:8px 10px;border-radius:9px;
+  border:1.5px solid #E2D9CA;background:#FFF;
+  font-size:12px;font-weight:600;color:#5A4030;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.act-btn:hover{background:#F5F0E8;border-color:#D4900A;color:#D4900A}
+.act-btn.primary{
+  background:linear-gradient(135deg,#D4900A,#C05020);
+  border-color:transparent;color:#FFF;
+}
+.act-btn.primary:hover{opacity:.9}
+.act-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+/* ── Context preview ── */
+.context-box{
+  margin:10px 12px 0;padding:9px 11px;border-radius:10px;
+  background:#FFF;border:1px solid #E2D9CA;
+  font-size:12px;color:#7A7070;line-height:1.5;max-height:80px;
+  overflow:hidden;position:relative;flex-shrink:0;
+}
+.context-box.loaded{color:#3A2810;border-color:#D4900A40}
+.context-fade{
+  position:absolute;bottom:0;left:0;right:0;height:24px;
+  background:linear-gradient(transparent,#FFF);pointer-events:none;
+}
+.context-label{
+  font-size:10px;font-weight:700;color:#D4900A;letter-spacing:1px;
+  text-transform:uppercase;margin-bottom:4px;
+}
+
+/* ── Messages ── */
+.messages{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.msg{padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.6;animation:fadeUp .25s ease}
+.msg.user{
+  background:linear-gradient(135deg,#D4900ACC,#C05020AA);
+  color:#FFF;margin-left:20px;border-radius:12px 12px 3px 12px;
+}
+.msg.assistant{
+  background:#FFF;border:1px solid #E2D9CA;
+  color:#1A1208;margin-right:10px;border-radius:12px 12px 12px 3px;
+}
+.msg.system{
+  background:#F0EBE0;border:1px solid #E2D9CA;
+  color:#7A7070;font-size:12px;text-align:center;
+}
+.msg-footer{font-size:10px;color:rgba(255,255,255,.6);margin-top:4px}
+.msg.assistant .msg-footer{color:#9A9090}
+.typing{display:flex;gap:4px;padding:4px 2px}
+.dot{width:6px;height:6px;border-radius:50%;background:#D4900A;animation:pulse 1.2s ease-in-out infinite}
+.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
+
+/* ── Insert panel ── */
+.insert-panel{
+  border-top:1px solid #E8E2D8;padding:8px 12px;
+  background:#FBF8F2;flex-shrink:0;
+}
+.last-reply{
+  font-size:11.5px;color:#5A4030;background:#FFF;
+  border:1px solid #E2D9CA;border-radius:8px;padding:7px 10px;
+  max-height:55px;overflow:hidden;position:relative;margin-bottom:6px;
+  line-height:1.5;
+}
+.last-reply-fade{position:absolute;bottom:0;left:0;right:0;height:18px;background:linear-gradient(transparent,#FFF);pointer-events:none}
+.insert-btn{
+  width:100%;padding:9px;border-radius:9px;
+  background:linear-gradient(135deg,#27AE60,#1E8449);
+  border:none;color:#FFF;font-weight:700;font-size:13px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.insert-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+/* ── Input ── */
+.input-area{
+  padding:8px 12px 10px;border-top:1px solid #E8E2D8;
+  background:#FFF;flex-shrink:0;
+}
+.input-row{
+  display:flex;gap:6px;align-items:flex-end;
+  background:#F0EBE0;border-radius:12px;padding:7px 8px;
+  border:1.5px solid transparent;transition:border .2s;
+}
+.input-row:focus-within{border-color:#D4900A60}
+.input-row textarea{
+  flex:1;background:transparent;border:none;resize:none;
+  font-size:13px;line-height:1.55;color:#1A1208;max-height:80px;
+  overflow-y:auto;padding-top:1px;
+}
+.input-row textarea::placeholder{color:#B0A898}
+.send-btn{
+  width:32px;height:32px;border-radius:8px;flex-shrink:0;
+  background:linear-gradient(135deg,#D4900A,#C05020);
+  border:none;color:#FFF;font-size:16px;
+  display:flex;align-items:center;justify-content:center;
+}
+.send-btn:disabled{opacity:.4;cursor:not-allowed}
+.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#FFF;border-radius:50%;animation:spin .7s linear infinite}
+
+/* ── Empty state ── */
+.empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;padding:20px;color:#9A9090;
+}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.empty h3{font-family:'Syne',sans-serif;font-size:15px;color:#5A4030;margin-bottom:6px}
+.empty p{font-size:12.5px;line-height:1.6}
+.quick-btns{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:12px}
+.quick-btn{padding:5px 11px;border-radius:16px;border:1px solid #E2D9CA;background:#FFF;font-size:11.5px;color:#7A7070;cursor:pointer}
+.quick-btn:hover{border-color:#D4900A;color:#D4900A}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-top">
+    <span class="brand">✦ Adelani AI</span>
+    <span class="app-badge" id="appBadge">Loading...</span>
+  </div>
+  <div class="agent-tabs" id="agentTabs"></div>
+</div>
+
+<!-- ACTION BUTTONS -->
+<div class="actions">
+  <button class="act-btn" id="btnRead" onclick="readDocument()">
+    <span>📖</span><span id="readLabel">Read Document</span>
+  </button>
+  <button class="act-btn primary" id="btnAnalyse" onclick="analyseDocument()" disabled>
+    <span>🔍</span><span>Analyse</span>
+  </button>
+</div>
+
+<!-- CONTEXT PREVIEW -->
+<div class="context-box" id="contextBox">
+  <div class="context-label">Document Content</div>
+  <div id="contextText">Click "Read Document" to load content from your file...</div>
+  <div class="context-fade"></div>
+</div>
+
+<!-- MESSAGES -->
+<div class="messages" id="messages">
+  <div class="empty" id="emptyState">
+    <div class="empty-icon" id="emptyIcon">📝</div>
+    <h3 id="emptyTitle">Adelani AI for Word</h3>
+    <p id="emptyDesc">Read your document then ask me anything — summarise, rewrite, translate, or generate new content.</p>
+    <div class="quick-btns" id="quickBtns"></div>
+  </div>
+</div>
+
+<!-- INSERT PANEL -->
+<div class="insert-panel" id="insertPanel" style="display:none">
+  <div class="last-reply" id="lastReplyPreview"></div>
+  <div class="last-reply-fade"></div>
+  <button class="insert-btn" id="btnInsert" onclick="insertToDocument()">
+    <span>✍️</span><span id="insertLabel">Insert into Document</span>
+  </button>
+</div>
+
+<!-- INPUT -->
+<div class="input-area">
+  <div class="input-row">
+    <textarea id="userInput" placeholder="Ask Adelani AI..." rows="1"
+      onkeydown="handleKey(event)"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+      <span id="sendIcon">↑</span>
+    </button>
+  </div>
+</div>
+
+<script>
+/* ══════════ CONFIG ══════════ */
+const BACKEND = "https://adelani-ai-backend.onrender.com";
+
+const AGENTS = [
+  {id:"asha",   name:"Asha",   icon:"✦", color:"#D4900A",
+   system:"You are Asha, a warm and highly intelligent AI assistant integrated into Microsoft Office. Help users with their documents, data and presentations. Give rich, accurate, well-structured answers."},
+  {id:"scholar",name:"Scholar",icon:"◈", color:"#2980B9",
+   system:"You are Scholar, an academic intelligence AI integrated into Microsoft Office. Help with research, curriculum, academic writing, document analysis and educational content."},
+  {id:"bizna",  name:"Bizna",  icon:"◆", color:"#C0730A",
+   system:"You are Bizna, a business intelligence AI integrated into Microsoft Office. Help with reports, data analysis, business writing, strategy documents and productivity tasks."},
+  {id:"dawa",   name:"Dawa",   icon:"✿", color:"#0A8C6E",
+   system:"You are Dawa, a health and wellness AI integrated into Microsoft Office. Help with health documents, medical reports, wellness content and research papers."},
+  {id:"ubuntu", name:"Ubuntu", icon:"◉", color:"#B84A1A",
+   system:"You are Ubuntu, an African languages and culture AI integrated into Microsoft Office. Help with translation, cultural content, multilingual documents and African studies."},
+  {id:"nexus",  name:"Nexus",  icon:"⊕", color:"#6B4ECC",
+   system:"You are Nexus, a research AI integrated into Microsoft Office. Help users research topics, find information, and enrich their documents with accurate data."},
+];
+
+const APP_CONFIG = {
+  Document:     {name:"Word",        icon:"📝", color:"#2B579A", insertLabel:"Insert into Document", readLabel:"Read Document",    emptyIcon:"📝"},
+  Workbook:     {name:"Excel",       icon:"📊", color:"#217346", insertLabel:"Insert into Cell",     readLabel:"Read Sheet",       emptyIcon:"📊"},
+  Presentation: {name:"PowerPoint",  icon:"📑", color:"#D24726", insertLabel:"Insert into Slide",    readLabel:"Read Presentation",emptyIcon:"📑"},
+};
+
+const QUICK_PROMPTS = {
+  Document:     ["Summarise this document","Fix grammar & spelling","Make it more professional","Translate to French","Shorten this text"],
+  Workbook:     ["Explain this data","Suggest a formula","Find patterns in the data","Write a summary of this sheet","What insights can you see?"],
+  Presentation: ["Improve this slide text","Write speaker notes","Make it more engaging","Suggest a slide structure","Simplify the language"],
+};
+
+/* ══════════ STATE ══════════ */
+let currentApp    = "Document";
+let currentAgent  = AGENTS[0];
+let messages      = [];
+let docContent    = "";
+let lastReply     = "";
+let busy          = false;
+
+/* ══════════ INIT ══════════ */
+Office.onReady(info => {
+  const host = info.host;
+  if      (host === Office.HostType.Word)        currentApp = "Document";
+  else if (host === Office.HostType.Excel)       currentApp = "Workbook";
+  else if (host === Office.HostType.PowerPoint)  currentApp = "Presentation";
+
+  const cfg = APP_CONFIG[currentApp];
+  document.getElementById("appBadge").textContent      = cfg.icon + " " + cfg.name;
+  document.getElementById("readLabel").textContent     = cfg.readLabel;
+  document.getElementById("insertLabel").textContent   = cfg.insertLabel;
+  document.getElementById("emptyIcon").textContent     = cfg.emptyIcon;
+  document.getElementById("emptyTitle").textContent    = "Adelani AI for " + cfg.name;
+  document.getElementById("emptyDesc").textContent     = getEmptyDesc();
+
+  // Default agent per app
+  if (currentApp === "Workbook")     currentAgent = AGENTS[2]; // Bizna for Excel
+  if (currentApp === "Presentation") currentAgent = AGENTS[0]; // Asha for PowerPoint
+
+  buildAgentTabs();
+  buildQuickBtns();
+  updateSendBtn();
+});
+
+function getEmptyDesc() {
+  if (currentApp === "Workbook")     return "Read your sheet then ask me to analyse data, explain figures, suggest formulas or write a summary.";
+  if (currentApp === "Presentation") return "Read your presentation then ask me to improve slides, write speaker notes or suggest content.";
+  return "Read your document then ask me anything — summarise, rewrite, translate or generate new content.";
+}
+
+/* ══════════ AGENT TABS ══════════ */
+function buildAgentTabs() {
+  const container = document.getElementById("agentTabs");
+  container.innerHTML = "";
+  AGENTS.forEach(a => {
+    const btn = document.createElement("button");
+    btn.className = "agent-tab" + (a.id === currentAgent.id ? " active" : "");
+    btn.textContent = a.icon + " " + a.name;
+    btn.onclick = () => selectAgent(a);
+    container.appendChild(btn);
+  });
+}
+
+function selectAgent(agent) {
+  currentAgent = agent;
+  buildAgentTabs();
+  addSystemMsg("Switched to " + agent.name + " — " + getAgentRole(agent.id));
+}
+
+function getAgentRole(id) {
+  const roles = {asha:"General Intelligence",scholar:"Education & Research",bizna:"Business & Productivity",dawa:"Health & Wellbeing",ubuntu:"African Languages & Culture",nexus:"Live Research"};
+  return roles[id] || "";
+}
+
+/* ══════════ QUICK BUTTONS ══════════ */
+function buildQuickBtns() {
+  const container = document.getElementById("quickBtns");
+  container.innerHTML = "";
+  const prompts = QUICK_PROMPTS[currentApp] || QUICK_PROMPTS.Document;
+  prompts.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "quick-btn";
+    btn.textContent = p;
+    btn.onclick = () => {
+      document.getElementById("userInput").value = p;
+      updateSendBtn();
+      sendMessage();
+    };
+    container.appendChild(btn);
+  });
+}
+
+/* ══════════ READ DOCUMENT ══════════ */
+async function readDocument() {
+  const btn = document.getElementById("btnRead");
+  btn.disabled = true;
+  btn.innerHTML = '<span style="width:13px;height:13px;border:2px solid #C8C0B0;border-top-color:#D4900A;border-radius:50%;animation:spin .7s linear infinite;display:inline-block"></span> Reading...';
+
+  try {
+    if      (currentApp === "Document")     docContent = await readWord();
+    else if (currentApp === "Workbook")     docContent = await readExcel();
+    else if (currentApp === "Presentation") docContent = await readPowerPoint();
+
+    const box  = document.getElementById("contextBox");
+    const text = document.getElementById("contextText");
+    box.className  = "context-box loaded";
+    text.textContent = docContent.slice(0, 300) + (docContent.length > 300 ? "..." : "");
+
+    document.getElementById("btnAnalyse").disabled = false;
+    addSystemMsg("✅ Document read successfully — " + docContent.length + " characters loaded.");
+    hideEmpty();
+  } catch(e) {
+    addSystemMsg("⚠️ Could not read document: " + e.message);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>📖</span><span id="readLabel">' + APP_CONFIG[currentApp].readLabel + '</span>';
+}
+
+async function readWord() {
+  return new Promise((resolve, reject) => {
+    Word.run(async context => {
+      const body = context.document.body;
+      body.load("text");
+      await context.sync();
+      resolve(body.text.trim() || "[Document appears to be empty]");
+    }).catch(reject);
+  });
+}
+
+async function readExcel() {
+  return new Promise((resolve, reject) => {
+    Excel.run(async context => {
+      const sheet = context.workbook.worksheets.getActiveWorksheet();
+      sheet.load("name");
+      const usedRange = sheet.getUsedRange(true);
+      usedRange.load(["values","address"]);
+      await context.sync();
+
+      const name = sheet.name;
+      const vals = usedRange.values;
+      if (!vals || !vals.length) { resolve("[Sheet '" + name + "' appears to be empty]"); return; }
+
+      let text = "Sheet: " + name + "\n\n";
+      vals.slice(0, 100).forEach((row, i) => {
+        text += row.map(c => (c === null || c === undefined || c === "") ? "-" : String(c)).join(" | ") + "\n";
+      });
+      if (vals.length > 100) text += "\n[Showing first 100 of " + vals.length + " rows]";
+      resolve(text);
+    }).catch(reject);
+  });
+}
+
+async function readPowerPoint() {
+  return new Promise((resolve, reject) => {
+    try {
+      Office.context.document.getSelectedDataAsync(
+        Office.CoercionType.Text,
+        result => {
+          if (result.status === Office.AsyncResultStatus.Succeeded) {
+            resolve(result.value || "[No text in current selection — try selecting a slide or text first]");
+          } else {
+            resolve("[Could not read slide content. Please select some text on a slide first]");
+          }
+        }
+      );
+    } catch(e) { reject(e); }
+  });
+}
+
+/* ══════════ ANALYSE ══════════ */
+function analyseDocument() {
+  if (!docContent) return;
+  const prompt = "Please analyse and summarise the content of this " +
+    APP_CONFIG[currentApp].name + " document. Identify key points, themes, and provide actionable insights.";
+  document.getElementById("userInput").value = prompt;
+  updateSendBtn();
+  sendMessage();
+}
+
+/* ══════════ SEND MESSAGE ══════════ */
+async function sendMessage() {
+  const input = document.getElementById("userInput");
+  const text  = input.value.trim();
+  if (!text || busy) return;
+
+  hideEmpty();
+  addMessage("user", text);
+  input.value = "";
+  input.style.height = "auto";
+  updateSendBtn();
+  setBusy(true);
+
+  // Build message with document context if available
+  const contextPrefix = docContent
+    ? "DOCUMENT CONTENT:\n" + docContent.slice(0, 8000) + "\n\n---\n\nUSER QUESTION: "
+    : "";
+
+  const apiMessages = [
+    ...messages.slice(-10).map(m => ({role:m.role, content:m.content})),
+    {role:"user", content: contextPrefix + text}
+  ];
+
+  try {
+    const r = await fetch(BACKEND + "/api/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        messages: apiMessages,
+        systemPrompt: currentAgent.system +
+          " You are currently integrated into Microsoft " + APP_CONFIG[currentApp].name + ".",
+        model: "meta-llama/llama-3.1-8b-instruct"
+      })
+    });
+    const d = await r.json();
+    const reply = d.reply || (d.error ? "⚠️ " + d.error : "No response.");
+    addMessage("assistant", reply);
+    lastReply = reply;
+    showInsertPanel(reply);
+  } catch(e) {
+    addMessage("assistant", "⚠️ Cannot reach server. Please check your connection and try again.");
+  }
+
+  setBusy(false);
+}
+
+/* ══════════ INSERT INTO DOCUMENT ══════════ */
+async function insertToDocument() {
+  if (!lastReply) return;
+  const btn = document.getElementById("btnInsert");
+  btn.disabled = true;
+  btn.innerHTML = '<span style="width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#FFF;border-radius:50%;animation:spin .7s linear infinite;display:inline-block"></span> Inserting...';
+
+  try {
+    if      (currentApp === "Document")     await insertWord(lastReply);
+    else if (currentApp === "Workbook")     await insertExcel(lastReply);
+    else if (currentApp === "Presentation") await insertPowerPoint(lastReply);
+    addSystemMsg("✅ Content inserted into your " + APP_CONFIG[currentApp].name + " document.");
+  } catch(e) {
+    addSystemMsg("⚠️ Could not insert content: " + e.message);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>✍️</span><span>' + APP_CONFIG[currentApp].insertLabel + '</span>';
+}
+
+async function insertWord(text) {
+  return Word.run(async context => {
+    const selection = context.document.getSelection();
+    selection.insertText("\n\n" + text, "After");
+    selection.paragraphs.getLast().select();
+    await context.sync();
+  });
+}
+
+async function insertExcel(text) {
+  return Excel.run(async context => {
+    const range = context.workbook.getSelectedRange();
+    range.load("address");
+    await context.sync();
+    range.values = [[text]];
+    range.format.wrapText = true;
+    await context.sync();
+  });
+}
+
+async function insertPowerPoint(text) {
+  return new Promise((resolve, reject) => {
+    Office.context.document.setSelectedDataAsync(
+      text,
+      {coercionType: Office.CoercionType.Text},
+      result => {
+        if (result.status === Office.AsyncResultStatus.Succeeded) resolve();
+        else reject(new Error(result.error.message));
+      }
+    );
+  });
+}
+
+/* ══════════ UI HELPERS ══════════ */
+function addMessage(role, content) {
+  const ts = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+  messages.push({role, content, ts});
+
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+
+  const p = document.createElement("div");
+  p.style.whiteSpace = "pre-wrap";
+  p.textContent = content;
+  div.appendChild(p);
+
+  const footer = document.createElement("div");
+  footer.className = "msg-footer";
+  footer.textContent = ts + (role === "assistant" ? " · " + currentAgent.name : "");
+  div.appendChild(footer);
+
+  document.getElementById("messages").appendChild(div);
+  scrollBottom();
+}
+
+function addSystemMsg(text) {
+  const div = document.createElement("div");
+  div.className = "msg system";
+  div.textContent = text;
+  document.getElementById("messages").appendChild(div);
+  scrollBottom();
+}
+
+function showInsertPanel(reply) {
+  const panel = document.getElementById("insertPanel");
+  const preview = document.getElementById("lastReplyPreview");
+  panel.style.display = "block";
+  preview.textContent = reply.slice(0, 120) + (reply.length > 120 ? "..." : "");
+}
+
+function setBusy(state) {
+  busy = state;
+  const btn  = document.getElementById("sendBtn");
+  const icon = document.getElementById("sendIcon");
+  if (state) {
+    btn.disabled = true;
+    icon.innerHTML = '<div class="spinner"></div>';
+  } else {
+    icon.textContent = "↑";
+    updateSendBtn();
+  }
+}
+
+function updateSendBtn() {
+  const val = document.getElementById("userInput").value.trim();
+  document.getElementById("sendBtn").disabled = !val || busy;
+}
+
+function scrollBottom() {
+  const m = document.getElementById("messages");
+  m.scrollTop = m.scrollHeight;
+}
+
+function hideEmpty() {
+  const el = document.getElementById("emptyState");
+  if (el) el.style.display = "none";
+}
+
+function handleKey(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+document.getElementById("userInput").addEventListener("input", updateSendBtn);
+</script>
+</body>
+</html>
