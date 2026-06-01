@@ -15,6 +15,13 @@
 html,body,#root{height:100%;overflow:hidden}
 body{font-family:'DM Sans',sans-serif;overscroll-behavior:none;background:#F2ECE0}
 textarea,input{resize:none;outline:none;border:none;-webkit-appearance:none;background:transparent}
+/* Allow text selection and copying on AI responses */
+.md, .msg-selectable{
+  -webkit-user-select:text;
+  -moz-user-select:text;
+  user-select:text;
+  cursor:text;
+}
 button{cursor:pointer;border:none;background:none;font-family:inherit;transition:opacity .15s,transform .1s}
 button:active{transform:scale(0.96)}
 ::-webkit-scrollbar{width:3px}
@@ -39,13 +46,31 @@ button:active{transform:scale(0.96)}
 </style>
 <script>
 (function(){
+  /* Block right-click */
   document.addEventListener('contextmenu',function(e){e.preventDefault();});
+
   document.addEventListener('keydown',function(e){
     var k=e.key||'',c=e.ctrlKey||e.metaKey,s=e.shiftKey;
+
+    /* Block F12 */
     if(k==='F12'){e.preventDefault();e.stopPropagation();return false;}
-    if(c&&s&&/^[ijcke]$/i.test(k)){e.preventDefault();return false;}
+
+    /* Block DevTools shortcuts: Ctrl+Shift+I/J/K/E (NOT C — allow copy) */
+    if(c&&s&&/^[ijke]$/i.test(k)){e.preventDefault();return false;}
+
+    /* Block Ctrl+U (view source), Ctrl+S (save), Ctrl+P (print) */
     if(c&&/^[usp]$/i.test(k)){e.preventDefault();return false;}
+
+    /* Ctrl+C is ALLOWED — users need to copy AI responses */
+    /* Ctrl+V (paste) is ALLOWED — users need to paste in input */
+    /* Ctrl+A is ALLOWED inside textarea/input only */
+    if(c&&k.toLowerCase()==='a'){
+      var tag=(document.activeElement||{}).tagName;
+      if(tag!=='INPUT'&&tag!=='TEXTAREA'){e.preventDefault();return false;}
+    }
   },true);
+
+  /* Allow text selection on AI response bubbles */
 })();
 </script>
 </head>
@@ -453,7 +478,7 @@ function Bubble({msg,agent,t,dark}){
         {msg.image&&<img src={`data:image/jpeg;base64,${msg.image}`} style={{maxWidth:200,borderRadius:10,marginBottom:6,border:`1px solid ${t.border}`}} alt=""/>}
         {/* Message bubble */}
         {msg.content&&(
-          <div className="md" style={{padding:"12px 16px",borderRadius:u?"18px 18px 4px 18px":"18px 18px 18px 4px",background:u?`linear-gradient(135deg,${agent.color}E0,${agent.color}A0)`:t.bub,color:u?"#FFF":t.text,fontSize:15.5,lineHeight:1.75,wordBreak:"break-word",border:u?"none":`1px solid ${t.bubBrd}`,boxShadow:u?`0 3px 16px ${agent.color}30`:"0 2px 6px rgba(0,0,0,.08)"}}
+          <div className="md" style={{padding:"12px 16px",borderRadius:u?"18px 18px 4px 18px":"18px 18px 18px 4px",background:u?`linear-gradient(135deg,${agent.color}E0,${agent.color}A0)`:t.bub,color:u?"#FFF":t.text,fontSize:15.5,lineHeight:1.75,wordBreak:"break-word",border:u?"none":`1px solid ${t.bubBrd}`,boxShadow:u?`0 3px 16px ${agent.color}30`:"0 2px 6px rgba(0,0,0,.08)",WebkitUserSelect:"text",MozUserSelect:"text",userSelect:"text",cursor:"text"}}
             dangerouslySetInnerHTML={u?undefined:{__html:md(msg.content,agent.color,dark)}}>
             {u?msg.content:undefined}
           </div>
@@ -980,7 +1005,7 @@ function App(){
 
           {!mobile&&(
             <div style={{textAlign:"center",fontSize:11,color:t.dim,marginTop:6,opacity:.65}}>
-              Adelani AI · 6 Agents · PDF · Word · Excel · PowerPoint · CSV · Images · Voice · Powered by ADELANI AI
+              Adelani AI · 6 Agents · PDF · Word · Excel · PowerPoint · CSV · Images · Voice · Powered by OpenRouter
             </div>
           )}
         </div>
