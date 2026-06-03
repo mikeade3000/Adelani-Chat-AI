@@ -6,14 +6,14 @@
 <meta name="theme-color" content="#F2ECE0"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Adelani AI Chat</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
+<!-- Times New Roman loaded from system — no external font needed -->
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body,#root{height:100%;overflow:hidden}
-body{font-family:'DM Sans',sans-serif;overscroll-behavior:none;background:#F2ECE0}
+body{font-family:'Times New Roman', Times, serif;overscroll-behavior:none;background:#F2ECE0}
 textarea,input{resize:none;outline:none;border:none;-webkit-appearance:none;background:transparent}
 /* Allow text selection and copying on AI responses */
 .md, .msg-selectable{
@@ -37,8 +37,8 @@ button:active{transform:scale(0.96)}
 @keyframes globePulse{0%,100%{filter:drop-shadow(0 0 16px rgba(100,180,255,.5))}50%{filter:drop-shadow(0 0 28px rgba(100,180,255,.8))}}
 .md b,.md strong{font-weight:700}
 .md em,.md i{font-style:italic}
-.md .h1{font-family:'Syne',sans-serif;font-weight:700;font-size:17px;margin:12px 0 5px}
-.md .h2{font-family:'Syne',sans-serif;font-weight:600;font-size:15.5px;margin:10px 0 4px}
+.md .h1{font-family:'Times New Roman', Times, serif;font-weight:700;font-size:17px;margin:12px 0 5px}
+.md .h2{font-family:'Times New Roman', Times, serif;font-weight:600;font-size:15.5px;margin:10px 0 4px}
 .md .h3{font-weight:600;font-size:15px;margin:8px 0 3px}
 .md .li{display:flex;gap:8px;margin:3px 0;line-height:1.65}
 .md code{font-family:monospace;font-size:13px;padding:2px 6px;border-radius:5px}
@@ -106,17 +106,17 @@ const TH={
 
 /* ══════════ AGENTS ══════════ */
 const AGENTS=[
-  {id:"asha",   name:"Asha",   icon:"✦",role:"General Intelligence",      color:"#D4900A",
+  {id:"asha",   name:"Asha",   icon:"✦",role:"General Intelligence",      color:"#4A7A2E",
    system:"You are Asha, Adelani AI Chat's warm and highly intelligent general assistant. Give rich, accurate, well-structured answers. When a file or document is shared, analyse it thoroughly."},
-  {id:"scholar",name:"Scholar",icon:"◈",role:"Education & Research",       color:"#2980B9",
+  {id:"scholar",name:"Scholar",icon:"◈",role:"Education & Research",       color:"#4A7A2E",
    system:"You are Scholar, Adelani AI Chat's academic intelligence. Excel at curriculum design, research methodology, academic writing, and CBE frameworks. Analyse any shared documents deeply."},
-  {id:"bizna",  name:"Bizna",  icon:"◆",role:"Business & Productivity",    color:"#C0730A",
+  {id:"bizna",  name:"Bizna",  icon:"◆",role:"Business & Productivity",    color:"#4A7A2E",
    system:"You are Bizna, Adelani AI Chat's business intelligence. Help with strategy, entrepreneurship, marketing, finance. Analyse any shared documents or data files thoroughly."},
-  {id:"dawa",   name:"Dawa",   icon:"✿",role:"Health & Wellbeing",          color:"#0A8C6E",
+  {id:"dawa",   name:"Dawa",   icon:"✿",role:"Health & Wellbeing",          color:"#4A7A2E",
    system:"You are Dawa, Adelani AI Chat's health companion. Provide health information and wellness guidance. Analyse any shared medical documents carefully, always recommending professional consultation."},
-  {id:"ubuntu", name:"Ubuntu", icon:"◉",role:"African Languages & Culture", color:"#B84A1A",
+  {id:"ubuntu", name:"Ubuntu", icon:"◉",role:"African Languages & Culture", color:"#4A7A2E",
    system:"You are Ubuntu. Expert in African languages, cultures, histories, and philosophies. Analyse any shared documents or images with cultural sensitivity."},
-  {id:"nexus",  name:"Nexus",  icon:"⊕",role:"Live Web Research",           color:"#6B4ECC",web:true,
+  {id:"nexus",  name:"Nexus",  icon:"⊕",role:"Live Web Research",           color:"#4A7A2E",web:true,
    system:"You are Nexus, Adelani AI Chat's live research agent. Search the internet in real time. Synthesize results into clear responses and cite sources. Analyse any shared files too."}
 ];
 
@@ -358,11 +358,11 @@ function WhatsNewModal({t,dark,onClose}){
       <div style={{background:dark?"#111113":t.card,borderRadius:26,border:`1px solid ${t.border}`,maxWidth:420,width:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 40px 100px rgba(0,0,0,.6)",animation:"popIn .35s cubic-bezier(0.34,1.56,0.64,1)"}}>
 
         {/* Header */}
-        <div style={{background:"linear-gradient(135deg,#D4900A,#C05020)",padding:"24px 24px 20px",flexShrink:0}}>
+        <div style={{background:"linear-gradient(135deg,#4A7A2E,#8B7218)",padding:"24px 24px 20px",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
             <span style={{fontSize:28}}>🚀</span>
             <div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:19,color:"#FFF",letterSpacing:"-.3px"}}>What's New in Adelani AI</div>
+              <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:19,color:"#FFF",letterSpacing:"-.3px"}}>What's New in Adelani AI</div>
               <div style={{fontSize:11.5,color:"rgba(255,255,255,.75)",marginTop:2,letterSpacing:"1px"}}>NEW UPDATE — FILE INTELLIGENCE</div>
             </div>
           </div>
@@ -377,22 +377,22 @@ function WhatsNewModal({t,dark,onClose}){
           {/* Feature groups */}
           {[
             {
-              icon:"📄",label:"Documents",color:"#2980B9",
+              icon:"📄",label:"Documents",color:"#4A7A2E",
               items:["PDF files (up to 25 pages)","Word (.docx / .doc)","ODT documents"]
             },
             {
-              icon:"📊",label:"Data & Spreadsheets",color:"#27AE60",
+              icon:"📊",label:"Data & Spreadsheets",color:"#4A7A2E",
               items:["Excel (.xlsx / .xls) — all sheets","CSV data files","PowerPoint (.pptx) — all slides"]
             },
             {
-              icon:"🖼️",label:"Images",color:"#8E44AD",
+              icon:"🖼️",label:"Images",color:"#4A7A2E",
               items:["JPG, PNG, GIF, WebP, TIFF","SVG graphics","Full AI vision analysis"]
             },
           ].map(g=>(
             <div key={g.label} style={{marginBottom:14,padding:"12px 14px",borderRadius:13,background:dark?"rgba(255,255,255,.04)":"rgba(0,0,0,.03)",border:`1px solid ${t.border}`}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                 <span style={{fontSize:18}}>{g.icon}</span>
-                <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13.5,color:g.color}}>{g.label}</span>
+                <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:13.5,color:g.color}}>{g.label}</span>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {g.items.map(item=>(
@@ -403,8 +403,8 @@ function WhatsNewModal({t,dark,onClose}){
           ))}
 
           {/* How to use */}
-          <div style={{padding:"12px 14px",borderRadius:13,background:dark?"rgba(212,144,10,.07)":"rgba(212,144,10,.06)",border:"1px solid rgba(212,144,10,.25)",marginBottom:16}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:"#D4900A",marginBottom:8}}>How to use</div>
+          <div style={{padding:"12px 14px",borderRadius:13,background:dark?"rgba(74,122,46,.07)":"rgba(74,122,46,.06)",border:"1px solid rgba(74,122,46,.25)",marginBottom:16}}>
+            <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:13,color:"#4A7A2E",marginBottom:8}}>How to use</div>
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {[
                 ["📎","Tap the paperclip button in the chat input"],
@@ -422,7 +422,7 @@ function WhatsNewModal({t,dark,onClose}){
 
           {/* Dismiss button */}
           <button onPointerDown={onClose}
-            style={{width:"100%",padding:"13px",borderRadius:13,background:"linear-gradient(135deg,#D4900A,#C05020)",border:"none",color:"#FFF",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(212,144,10,.35)"}}>
+            style={{width:"100%",padding:"13px",borderRadius:13,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(74,122,46,.35)"}}>
             Got it, let's go! →
           </button>
         </div>
@@ -437,24 +437,24 @@ function LimitModal({t,dark,onClose}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeIn .2s ease"}}
          onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={{background:dark?"#111113":t.card,borderRadius:24,border:`1px solid ${t.border}`,maxWidth:390,width:"100%",overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,.5)",animation:"popIn .3s ease"}}>
-        <div style={{background:"linear-gradient(145deg,rgba(37,211,102,.1),rgba(212,144,10,.08))",padding:"28px 24px 20px",textAlign:"center",borderBottom:`1px solid ${t.border}`}}>
+        <div style={{background:"linear-gradient(145deg,rgba(37,211,102,.1),rgba(74,122,46,.08))",padding:"28px 24px 20px",textAlign:"center",borderBottom:`1px solid ${t.border}`}}>
           <div style={{fontSize:50,marginBottom:10}}>🔒</div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:21,color:t.text,marginBottom:8}}>Daily Limit Reached</div>
-          <div style={{color:t.muted,fontSize:14.5,lineHeight:1.65}}>You've used your <strong style={{color:"#D4900A"}}>10 free daily messages</strong>. Upgrade to Premium for unlimited access.</div>
+          <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:21,color:t.text,marginBottom:8}}>Daily Limit Reached</div>
+          <div style={{color:t.muted,fontSize:14.5,lineHeight:1.65}}>You've used your <strong style={{color:"#4A7A2E"}}>10 free daily messages</strong>. Upgrade to Premium for unlimited access.</div>
         </div>
         <div style={{padding:"20px 24px 24px"}}>
           <div style={{background:"rgba(37,211,102,.07)",border:"1.5px solid rgba(37,211,102,.28)",borderRadius:14,padding:"16px",marginBottom:16,textAlign:"center"}}>
             <div style={{fontSize:12,color:t.muted,letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Contact for Premium</div>
-            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,color:t.text,marginBottom:4}}>Dr. Michael Adelani Adewusi</div>
-            <div style={{fontSize:15.5,color:"#25D366",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
+            <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16,color:t.text,marginBottom:4}}>Dr. Michael Adelani Adewusi</div>
+            <div style={{fontSize:15.5,color:"#4A7A2E",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
           </div>
           <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15.5,textDecoration:"none",marginBottom:10}}>
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,textDecoration:"none",marginBottom:10}}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
             Get Premium on WhatsApp →
           </a>
           <button onPointerDown={onClose} style={{width:"100%",padding:"11px",borderRadius:12,border:`1px solid ${t.border}`,color:t.muted,fontSize:14,cursor:"pointer",background:"transparent"}}>Maybe Later</button>
-          <div style={{textAlign:"center",marginTop:12,fontSize:12.5,color:t.muted}}>🔄 Resets daily · <span style={{color:"#D4900A",fontWeight:600}}>Premium = Unlimited</span></div>
+          <div style={{textAlign:"center",marginTop:12,fontSize:12.5,color:t.muted}}>🔄 Resets daily · <span style={{color:"#4A7A2E",fontWeight:600}}>Premium = Unlimited</span></div>
         </div>
       </div>
     </div>
@@ -494,19 +494,19 @@ function Sidebar({t,dark,agent,agents,user,isGuest,onSwitch,onAdmin,onLogout}){
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:t.surf}}>
       <div style={{padding:"20px 16px 14px",borderBottom:`1px solid ${t.border}`,flexShrink:0}}>
-        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:18,background:"linear-gradient(135deg,#D4900A,#C05020)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
+        <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:18,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
         <div style={{fontSize:10,color:t.muted,marginTop:2,letterSpacing:"2.5px",textTransform:"uppercase",fontWeight:600}}>Multi-Agent Chat</div>
       </div>
       <div style={{padding:"10px",borderBottom:`1px solid ${t.border}`,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:t.inp,border:`1px solid ${t.border}`}}>
-          <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,rgba(212,144,10,.22),rgba(192,80,32,.14))",border:"1.5px solid rgba(212,144,10,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#D4900A",fontSize:14,flexShrink:0}}>
+          <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,rgba(74,122,46,.22),rgba(74,122,46,.14))",border:"1.5px solid rgba(74,122,46,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Times New Roman', Times, serif",fontWeight:700,color:"#4A7A2E",fontSize:14,flexShrink:0}}>
             {isGuest?"G":user?.username?.[0]?.toUpperCase()||"U"}
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:600,fontSize:14,color:t.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isGuest?"Guest User":user?.username}</div>
             <div style={{fontSize:11,color:t.muted,marginTop:1}}>{user?.role==="admin"?"⚙ Administrator":"✦ Adelani AI"}</div>
           </div>
-          {user?.role==="admin"&&<button onPointerDown={onAdmin} style={{padding:"3px 8px",borderRadius:7,background:"rgba(212,144,10,.12)",border:"1px solid rgba(212,144,10,.3)",color:"#D4900A",fontSize:12,fontWeight:700,cursor:"pointer"}}>⚙</button>}
+          {user?.role==="admin"&&<button onPointerDown={onAdmin} style={{padding:"3px 8px",borderRadius:7,background:"rgba(74,122,46,.12)",border:"1px solid rgba(74,122,46,.3)",color:"#4A7A2E",fontSize:12,fontWeight:700,cursor:"pointer"}}>⚙</button>}
         </div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
@@ -516,7 +516,7 @@ function Sidebar({t,dark,agent,agents,user,isGuest,onSwitch,onAdmin,onLogout}){
             style={{padding:"10px 11px",borderRadius:12,marginBottom:3,cursor:"pointer",background:agent.id===a.id?`${a.color}12`:"transparent",border:agent.id===a.id?`1px solid ${a.color}32`:"1px solid transparent",display:"flex",alignItems:"center",gap:9,transition:"background .15s"}}>
             <div style={{width:35,height:35,borderRadius:10,background:`${a.color}14`,border:`1px solid ${a.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:a.color,flexShrink:0}}>{a.icon}</div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14,color:agent.id===a.id?a.color:t.text}}>{a.name}</div>
+              <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:600,fontSize:14,color:agent.id===a.id?a.color:t.text}}>{a.name}</div>
               <div style={{fontSize:11.5,color:t.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.role}</div>
             </div>
             {a.web&&<span style={{fontSize:9,color:a.color,background:`${a.color}16`,padding:"2px 6px",borderRadius:8,border:`1px solid ${a.color}28`,fontWeight:700}}>LIVE</span>}
@@ -546,24 +546,24 @@ function AuthScreen({onAuth,onGuest,t,dark}){
     }catch(e){setErr("Cannot reach server.");}
     setBusy(false);
   };
-  const tS=id=>({flex:1,padding:"13px 0",background:"transparent",border:"none",borderBottom:`2.5px solid ${tab===id?"#D4900A":"transparent"}`,color:tab===id?"#D4900A":t.muted,fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,cursor:"pointer",transition:"all .2s"});
-  const inp={width:"100%",padding:"13px 15px",borderRadius:11,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:15,fontFamily:"'DM Sans',sans-serif",marginBottom:11};
-  const bigBtn={width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#D4900A,#C05020)",border:"none",color:"#FFF",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(212,144,10,.35)"};
+  const tS=id=>({flex:1,padding:"13px 0",background:"transparent",border:"none",borderBottom:`2.5px solid ${tab===id?"#4A7A2E":"transparent"}`,color:tab===id?"#4A7A2E":t.muted,fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:14,cursor:"pointer",transition:"all .2s"});
+  const inp={width:"100%",padding:"13px 15px",borderRadius:11,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:15,fontFamily:"'Times New Roman', Times, serif",marginBottom:11};
+  const bigBtn={width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(74,122,46,.35)"};
   return(
     <div style={{height:"100%",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto",position:"relative"}}>
-      <div style={{position:"fixed",top:"-20%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:"radial-gradient(circle,rgba(212,144,10,.06),transparent 70%)",pointerEvents:"none",animation:"orb1 14s ease-in-out infinite"}}/>
-      <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(192,80,32,.04),transparent 70%)",pointerEvents:"none",animation:"orb2 18s ease-in-out infinite"}}/>
+      <div style={{position:"fixed",top:"-20%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:"radial-gradient(circle,rgba(74,122,46,.06),transparent 70%)",pointerEvents:"none",animation:"orb1 14s ease-in-out infinite"}}/>
+      <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(74,122,46,.04),transparent 70%)",pointerEvents:"none",animation:"orb2 18s ease-in-out infinite"}}/>
       <div style={{width:"100%",maxWidth:440,position:"relative",zIndex:1}}>
         <div style={{textAlign:"center",marginBottom:26}}>
-          <div style={{display:"inline-flex",width:76,height:76,borderRadius:22,background:"linear-gradient(135deg,rgba(212,144,10,.18),rgba(192,80,32,.12))",border:"2px solid rgba(212,144,10,.32)",alignItems:"center",justifyContent:"center",marginBottom:14}}>
-            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:27,background:"linear-gradient(135deg,#D4900A,#C05020)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI</span>
+          <div style={{display:"inline-flex",width:76,height:76,borderRadius:22,background:"linear-gradient(135deg,rgba(74,122,46,.18),rgba(74,122,46,.12))",border:"2px solid rgba(74,122,46,.32)",alignItems:"center",justifyContent:"center",marginBottom:14}}>
+            <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:27,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI</span>
           </div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:31,background:"linear-gradient(135deg,#D4900A 30%,#C05020 70%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:"-.5px"}}>Adelani AI Chat</div>
+          <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:31,background:"linear-gradient(135deg,#4A7A2E 30%,#3A5F22 70%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:"-.5px"}}>Adelani AI Chat</div>
           <div style={{color:t.muted,fontSize:12,marginTop:4,letterSpacing:"3px"}}>MULTI-AGENT PLATFORM</div>
         </div>
         <div style={{display:"flex",gap:9,justifyContent:"center",flexWrap:"wrap",marginBottom:22}}>
           {AGENTS.map((a,i)=>(
-            <div key={a.id} style={{padding:"9px 18px",borderRadius:28,background:`${a.color}14`,border:`1.5px solid ${a.color}44`,fontSize:14.5,color:a.color,fontWeight:700,fontFamily:"'Syne',sans-serif",display:"flex",alignItems:"center",gap:6,animation:`fadeUp .4s ease ${i*.06}s both`}}>
+            <div key={a.id} style={{padding:"9px 18px",borderRadius:28,background:`${a.color}14`,border:`1.5px solid ${a.color}44`,fontSize:14.5,color:a.color,fontWeight:700,fontFamily:"'Times New Roman', Times, serif",display:"flex",alignItems:"center",gap:6,animation:`fadeUp .4s ease ${i*.06}s both`}}>
               <span style={{fontSize:16}}>{a.icon}</span>{a.name}
               {a.web&&<span style={{fontSize:9,background:`${a.color}22`,borderRadius:6,padding:"1px 5px",letterSpacing:"1px"}}>LIVE</span>}
             </div>
@@ -581,7 +581,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
             {tab==="guest"&&(
               <div style={{textAlign:"center"}}>
                 <Globe/>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:22,color:t.text,marginBottom:9}}>Try Adelani AI Free</div>
+                <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:22,color:t.text,marginBottom:9}}>Try Adelani AI Free</div>
                 <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Access all 6 AI agents instantly.<br/>Upload documents, images & more.</div>
                 <button onPointerDown={onGuest} style={bigBtn}>Explore as Guest →</button>
                 <div style={{color:t.muted,fontSize:13,marginTop:13}}>10 free messages per day</div>
@@ -591,7 +591,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
               <div>
                 <input value={u} onChange={e=>setU(e.target.value)} placeholder="Username" style={inp}/>
                 <input type="password" value={p} onChange={e=>setP(e.target.value)} placeholder="Password" onKeyDown={e=>e.key==="Enter"&&login()} style={{...inp,marginBottom:16}}/>
-                {err&&<div style={{color:"#C0392B",fontSize:13.5,marginBottom:12,padding:"10px 13px",borderRadius:9,background:"rgba(192,57,43,.08)",border:"1px solid rgba(192,57,43,.2)"}}>{err}</div>}
+                {err&&<div style={{color:"#4A7A2E",fontSize:13.5,marginBottom:12,padding:"10px 13px",borderRadius:9,background:"rgba(192,57,43,.08)",border:"1px solid rgba(192,57,43,.2)"}}>{err}</div>}
                 <button onPointerDown={!busy?login:undefined} style={{...bigBtn,opacity:busy?.6:1}}>
                   {busy?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><Spinner color="#FFF"/>Signing in...</span>:"Sign In →"}
                 </button>
@@ -600,15 +600,15 @@ function AuthScreen({onAuth,onGuest,t,dark}){
             {tab==="premium"&&(
               <div style={{textAlign:"center"}}>
                 <div style={{fontSize:50,marginBottom:14}}>⭐</div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:20,color:t.text,marginBottom:9}}>Adelani Premium</div>
+                <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:20,color:t.text,marginBottom:9}}>Adelani Premium</div>
                 <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Unlimited messages · All 6 agents<br/>Priority AI · No daily limits.</div>
                 <div style={{background:"rgba(37,211,102,.07)",border:"1.5px solid rgba(37,211,102,.28)",borderRadius:15,padding:"18px",marginBottom:18,textAlign:"center"}}>
                   <div style={{fontSize:11.5,color:t.muted,letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:9}}>Contact to Upgrade</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16.5,color:t.text,marginBottom:5}}>Dr. Michael Adelani Adewusi</div>
-                  <div style={{fontSize:16,color:"#25D366",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
+                  <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16.5,color:t.text,marginBottom:5}}>Dr. Michael Adelani Adewusi</div>
+                  <div style={{fontSize:16,color:"#4A7A2E",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
                 </div>
                 <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
-                  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15.5,textDecoration:"none"}}>
+                  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,textDecoration:"none"}}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                   Get Premium on WhatsApp →
                 </a>
@@ -640,16 +640,16 @@ function AdminPanel({onBack,t,dark,toggleTheme}){
       <div style={{padding:"0 16px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${t.border}`,background:t.surf,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button onPointerDown={onBack} style={{background:t.inp,border:`1px solid ${t.border}`,borderRadius:9,padding:"7px 13px",color:t.text,fontSize:13.5,cursor:"pointer"}}>← Chat</button>
-          <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#D4900A,#C05020)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Admin Panel</span>
+          <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Admin Panel</span>
         </div>
         <button onPointerDown={toggleTheme} style={{background:t.inp,border:`1px solid ${t.border}`,borderRadius:9,width:36,height:36,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"18px 16px",maxWidth:800,margin:"0 auto",width:"100%"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
-          {[{l:"Total",v:users.length,e:"👥",c:"#D4900A"},{l:"Active",v:users.filter(u=>u.activated).length,e:"✅",c:"#27AE60"},{l:"Pending",v:users.filter(u=>!u.activated).length,e:"⏳",c:"#E67E22"}].map(s=>(
+          {[{l:"Total",v:users.length,e:"👥",c:"#4A7A2E"},{l:"Active",v:users.filter(u=>u.activated).length,e:"✅",c:"#27AE60"},{l:"Pending",v:users.filter(u=>!u.activated).length,e:"⏳",c:"#E67E22"}].map(s=>(
             <div key={s.l} style={{background:t.card,borderRadius:14,padding:"14px",border:`1px solid ${t.border}`,textAlign:"center"}}>
               <div style={{fontSize:22,marginBottom:4}}>{s.e}</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:26,color:s.c}}>{s.v}</div>
+              <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:26,color:s.c}}>{s.v}</div>
               <div style={{fontSize:12.5,color:t.muted}}>{s.l}</div>
             </div>
           ))}
@@ -659,15 +659,15 @@ function AdminPanel({onBack,t,dark,toggleTheme}){
           {!busy&&users.length===0&&<div style={{padding:36,textAlign:"center",color:t.muted}}>No registered users yet.</div>}
           {!busy&&users.map((u,i)=>(
             <div key={u.id} style={{display:"flex",alignItems:"center",gap:9,padding:"13px 15px",borderBottom:i<users.length-1?`1px solid ${t.border}`:"none",flexWrap:"wrap"}}>
-              <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(212,144,10,.16)",border:"1px solid rgba(212,144,10,.28)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#D4900A",fontSize:15,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
+              <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(74,122,46,.16)",border:"1px solid rgba(74,122,46,.28)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Times New Roman', Times, serif",fontWeight:700,color:"#4A7A2E",fontSize:15,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
               <div style={{flex:1,minWidth:90}}>
                 <div style={{fontWeight:600,color:t.text,fontSize:14}}>{u.username}</div>
                 <div style={{fontSize:12,color:t.muted}}>{u.email||"—"} · {u.msgCount||0} msgs</div>
               </div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                 <span style={{padding:"3px 8px",borderRadius:20,fontSize:12,fontWeight:700,background:u.activated?"rgba(39,174,96,.12)":"rgba(230,126,34,.12)",color:u.activated?"#27AE60":"#E67E22",border:`1px solid ${u.activated?"rgba(39,174,96,.28)":"rgba(230,126,34,.28)"}`}}>{u.activated?"✓ Active":"⏳ Pending"}</span>
-                {!u.activated&&<button onPointerDown={()=>act(u.username,"activate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(39,174,96,.12)",border:"1px solid rgba(39,174,96,.3)",color:"#27AE60",fontSize:12,fontWeight:600,cursor:"pointer"}}>Activate</button>}
-                {u.activated&&<button onPointerDown={()=>act(u.username,"deactivate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(230,126,34,.1)",border:"1px solid rgba(230,126,34,.3)",color:"#E67E22",fontSize:12,cursor:"pointer"}}>Revoke</button>}
+                {!u.activated&&<button onPointerDown={()=>act(u.username,"activate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(39,174,96,.12)",border:"1px solid rgba(39,174,96,.3)",color:"#4A7A2E",fontSize:12,fontWeight:600,cursor:"pointer"}}>Activate</button>}
+                {u.activated&&<button onPointerDown={()=>act(u.username,"deactivate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(230,126,34,.1)",border:"1px solid rgba(230,126,34,.3)",color:"#4A7A2E",fontSize:12,cursor:"pointer"}}>Revoke</button>}
                 <button onPointerDown={()=>act(u.username,u.banned?"unban":"ban")} style={{padding:"5px 11px",borderRadius:7,background:u.banned?"rgba(39,174,96,.1)":"rgba(192,57,43,.1)",border:`1px solid ${u.banned?"rgba(39,174,96,.3)":"rgba(192,57,43,.3)"}`,color:u.banned?"#27AE60":"#C0392B",fontSize:12,cursor:"pointer"}}>{u.banned?"Restore":"Suspend"}</button>
                 <button onPointerDown={()=>act(u.username,"delete")} style={{padding:"5px 10px",borderRadius:7,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:12,cursor:"pointer"}}>✕</button>
               </div>
@@ -839,8 +839,8 @@ function App(){
 
   if(view==="loading") return(
     <div style={{height:"100%",background:"#F2ECE0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
-      <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,background:"linear-gradient(135deg,#D4900A,#C05020)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
-      <div style={{width:32,height:32,border:"3px solid rgba(212,144,10,.2)",borderTopColor:"#D4900A",borderRadius:"50%",animation:"spin .9s linear infinite"}}/>
+      <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:28,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
+      <div style={{width:32,height:32,border:"3px solid rgba(74,122,46,.2)",borderTopColor:"#4A7A2E",borderRadius:"50%",animation:"spin .9s linear infinite"}}/>
     </div>
   );
   if(view==="auth")  return <AuthScreen onAuth={u=>{setUser(u);setGuest(false);setView("chat");}} onGuest={()=>{setGuest(true);setView("chat");}} t={t} dark={dark}/>;
@@ -852,7 +852,7 @@ function App(){
     {showWhatsNew&&<WhatsNewModal t={t} dark={dark} onClose={()=>{ls.set(WHATS_NEW_KEY,true);setShowWhatsNew(false);}}/>}
     {showLimit&&<LimitModal t={t} dark={dark} onClose={()=>setShowLimit(false)}/>}
     <div style={{position:"fixed",top:"-25%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:`radial-gradient(circle,${agent.color}0A,transparent 70%)`,pointerEvents:"none",zIndex:0,animation:"orb1 14s ease-in-out infinite"}}/>
-    <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(192,80,32,.05),transparent 70%)",pointerEvents:"none",zIndex:0,animation:"orb2 18s ease-in-out infinite"}}/>
+    <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(74,122,46,.05),transparent 70%)",pointerEvents:"none",zIndex:0,animation:"orb2 18s ease-in-out infinite"}}/>
 
     <div style={{display:"flex",height:"100%",position:"relative",overflow:"hidden"}}>
       {!mobile&&(
@@ -877,9 +877,9 @@ function App(){
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <button onPointerDown={()=>setSide(o=>!o)} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{sideOpen?(mobile?"✕":"←"):"☰"}</button>
             {mobile
-              ?<div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#D4900A,#C05020)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
+              ?<div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
               :<><div style={{width:32,height:32,borderRadius:9,background:`${agent.color}14`,border:`1.5px solid ${agent.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:agent.color}}>{agent.icon}</div>
-                <div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:t.text}}>{agent.name}</div><div style={{fontSize:11.5,color:t.muted}}>{agent.role}</div></div>
+                <div><div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:15,color:t.text}}>{agent.name}</div><div style={{fontSize:11.5,color:t.muted}}>{agent.role}</div></div>
                 {agent.web&&<span style={{padding:"2px 8px",borderRadius:20,background:`${agent.color}12`,border:`1px solid ${agent.color}26`,fontSize:9.5,color:agent.color,fontWeight:700}}>● LIVE</span>}
               </>}
           </div>
@@ -896,7 +896,7 @@ function App(){
         {mobile&&(
           <div style={{padding:"6px 10px",borderBottom:`1px solid ${t.border}`,background:t.surf,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <div style={{width:20,height:20,borderRadius:6,background:`${agent.color}14`,border:`1px solid ${agent.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:agent.color}}>{agent.icon}</div>
-            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:13,color:agent.color}}>{agent.name}</span>
+            <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:600,fontSize:13,color:agent.color}}>{agent.name}</span>
             <span style={{fontSize:12,color:t.muted,flex:1}}>· {agent.role}</span>
             {agent.web&&<span style={{fontSize:9.5,color:agent.color,fontWeight:700}}>LIVE</span>}
             <button onPointerDown={clearChat} style={{background:"transparent",border:`1px solid ${t.border}`,borderRadius:6,padding:"3px 9px",color:t.muted,fontSize:11.5,cursor:"pointer"}}>Clear</button>
@@ -908,7 +908,7 @@ function App(){
           {msgs.length===0&&(
             <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"28px 18px",animation:"fadeUp .5s ease"}}>
               <div style={{width:70,height:70,borderRadius:20,background:`${agent.color}14`,border:`2px solid ${agent.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,color:agent.color,marginBottom:18}}>{agent.icon}</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:mobile?21:24,fontWeight:700,color:t.text,marginBottom:7}}>Hello, I'm {agent.name}</div>
+              <div style={{fontFamily:"'Times New Roman', Times, serif",fontSize:mobile?21:24,fontWeight:700,color:t.text,marginBottom:7}}>Hello, I'm {agent.name}</div>
               <div style={{fontSize:14.5,color:t.muted,maxWidth:320,lineHeight:1.65,marginBottom:10}}>{agent.role} · Powered by Adelani AI</div>
               <div style={{fontSize:13,color:t.muted,marginBottom:20,padding:"6px 14px",borderRadius:20,background:t.inp,border:`1px solid ${t.border}`}}>
                 📎 Supports: PDF, Word, Excel, PowerPoint, CSV, images & more
@@ -945,7 +945,7 @@ function App(){
             {AGENTS.map(a=>(
               <button key={a.id} onPointerDown={()=>setAgent(a)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"5px 11px",borderRadius:10,background:agent.id===a.id?`${a.color}12`:"transparent",border:agent.id===a.id?`1.5px solid ${a.color}32`:"1px solid transparent",color:a.color,flexShrink:0,cursor:"pointer"}}>
                 <span style={{fontSize:15}}>{a.icon}</span>
-                <span style={{fontSize:10,fontFamily:"'Syne',sans-serif",fontWeight:600,color:agent.id===a.id?a.color:t.muted,whiteSpace:"nowrap"}}>{a.name}</span>
+                <span style={{fontSize:10,fontFamily:"'Times New Roman', Times, serif",fontWeight:600,color:agent.id===a.id?a.color:t.muted,whiteSpace:"nowrap"}}>{a.name}</span>
               </button>
             ))}
           </div>
@@ -986,7 +986,7 @@ function App(){
             <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!mobile){e.preventDefault();send();}}}
               placeholder={attachment?`Ask about ${attachment.name||"the file"}...`:(agent.web?`Ask ${agent.name} to search...`:`Message ${agent.name}...`)}
-              rows={1} style={{flex:1,color:t.text,fontSize:15.5,lineHeight:1.7,fontFamily:"'DM Sans',sans-serif",maxHeight:130,overflowY:"auto",paddingTop:3}}
+              rows={1} style={{flex:1,color:t.text,fontSize:15.5,lineHeight:1.7,fontFamily:"'Times New Roman', Times, serif",maxHeight:130,overflowY:"auto",paddingTop:3}}
               onInput={e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,130)+"px";}}/>
 
             {/* Send button */}
