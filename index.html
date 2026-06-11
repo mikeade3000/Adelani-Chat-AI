@@ -81,6 +81,7 @@ const {useState,useEffect,useRef,useCallback} = React;
 
 /* ══════════ CONFIG ══════════ */
 const BACKEND     = "https://adelani-ai-backend.onrender.com";
+const HEAVY_MODEL = "meta-llama/llama-3.1-70b-instruct"; // used only for registered-user full Scholar articles
 const DAILY_LIMIT = 10;
 const WA_LINK     = "https://wa.me/2348115800375?text=" + encodeURIComponent("Hello Dr. Adewusi, I'd like to upgrade to Adelani AI Premium.");
 
@@ -119,6 +120,64 @@ const AGENTS=[
   {id:"nexus",  name:"Nexus",  icon:"⊕",role:"Live Web Research",           color:"#4A7A2E",web:true,
    system:"You are Nexus, Adelani AI Chat's live research agent. Search the internet in real time. Synthesize results into clear responses and cite sources. Analyse any shared files too."}
 ];
+
+/* ══════════ REVIEW ARTICLE ENGINE ══════════ */
+const REVIEW_ENGINE_SYS = `You are a senior academic author and peer reviewer with deep expertise in ‹FIELD/DISCIPLINE› and a record of publishing ‹REVIEW_TYPE› review articles in indexed, peer-reviewed journals. Write a complete, submission-ready review article on ‹TOPIC› for ‹TARGET_JOURNAL›, obeying every directive below.
+
+STRUCTURE (in order): 1) Title (<=15 words, no full stop). 2) Abstract — ‹ABSTRACT_TYPE›, 200–300 words, no citations. 3) Keywords — ‹KEYWORDS›, alphabetized. 4) Introduction — context, gap, rationale, explicit aim, scope. 5) Methods / Review Strategy scaled to ‹REVIEW_TYPE› (for systematic/scoping include databases, search string, date range, inclusion/exclusion criteria and ‹SPECIAL_REQUIREMENTS›). 6) Thematic Body — 3–6 sections that synthesize and compare across studies. 7) Discussion / Synthesis. 8) Limitations. 9) Future Directions / Implications. 10) Conclusion (no new citations). 11) Declarations (funding, conflicts, contributions, data availability, ethics). 12) References in APA 7th.
+
+CITATIONS (APA 7th, strict): about ‹TOTAL_REFERENCES› references, recent where possible. In-text author–date; et al. for 3+ authors. Reference list alphabetical, hanging indent, sentence-case titles, italicized journal names and volume. Every reference ends in a resolvable https://doi.org/10.xxxx/xxxxx link, or a stable URL where no DOI exists. NEVER fabricate or pattern-generate a DOI — if you cannot confirm one, append [VERIFY DOI] and leave it blank. At least ‹TARGET_JOURNAL_CITE_%›% of references must come from ‹TARGET_JOURNAL› itself, each genuinely relevant and naturally distributed, never padded; if too few relevant works exist, flag the shortfall. One-to-one match between in-text citations and the reference list.
+
+STYLE: apply ‹SPELLING_CONVENTION› uniformly everywhere. Define each abbreviation once. Vary sentence structure; do NOT repeat words/phrases in close proximity; avoid AI crutch phrases (delve, moreover/furthermore overuse, "it is important to note", "plays a crucial role", "tapestry"). No padding; each paragraph advances a distinct point. Active, precise verbs; measured scholarly tone.
+
+TABLES & FIGURES: include ‹NUM_TABLES› tables and ‹NUM_FIGURES› figures, each informative. Number sequentially; table captions above, figure captions below; label all axes/columns/units; call out each exhibit in the text before it appears. Render tables in Markdown; for each figure give a caption, a description, and a labeled data table or plotting spec. Do not present fabricated data as real measurements.
+
+INTEGRITY: original synthesis only; paraphrase; short quoted+cited direct quotes only. Match the journal's aims and scope. AUDIENCE: ‹AUDIENCE›. TARGET LENGTH: ‹WORD_COUNT› (excluding references). End with a brief Submission Notes block listing any [VERIFY DOI] items and the final word and reference counts.`;
+
+function buildReviewSystem(cfg, mode){
+  const map = {
+    "‹FIELD/DISCIPLINE›": cfg.field||"the relevant discipline",
+    "‹REVIEW_TYPE›": cfg.reviewType||"Narrative",
+    "‹TOPIC›": cfg.topic,
+    "‹TARGET_JOURNAL›": cfg.journal,
+    "‹ABSTRACT_TYPE›": cfg.abstractType||"Structured",
+    "‹KEYWORDS›": cfg.keywords||"generate 4–6 keywords",
+    "‹SPECIAL_REQUIREMENTS›": cfg.special||"the standard reporting checklist",
+    "‹TOTAL_REFERENCES›": cfg.totalRefs||"40–60",
+    "‹TARGET_JOURNAL_CITE_%›": cfg.citePct||"50",
+    "‹SPELLING_CONVENTION›": cfg.spelling||"British English",
+    "‹NUM_TABLES›": mode==="preview"?"0":(cfg.numTables||"3"),
+    "‹NUM_FIGURES›": mode==="preview"?"0":(cfg.numFigures||"3"),
+    "‹AUDIENCE›": cfg.audience||"scholars",
+    "‹WORD_COUNT›": mode==="preview"?"about 700 words (PREVIEW ONLY)":(cfg.wordCount||"6,000–8,000")
+  };
+  let s = REVIEW_ENGINE_SYS;
+  for(const k in map){ s = s.split(k).join(map[k]); }
+  if(mode==="preview"){
+    s += "\n\nFREE PREVIEW MODE (strict): produce ONLY the Title, Abstract, Keywords, a short bulleted outline naming the remaining sections, and the Introduction. Keep the whole output under ~700 words. Do NOT write the methods, body, discussion, limitations, tables, figures, or reference list. End with exactly: '— Preview ends here. Register or log in to generate the full article: all sections, tables, figures, and the complete APA 7th reference list with DOIs.'";
+  } else {
+    s += "\n\nFULL MODE: produce the complete article. If a single response is cut off by length, stop cleanly at a section boundary so it can be continued on request.";
+  }
+  return s;
+}
+
+async function chatRequest(payload){
+  const MAX_WAIT=90000, RETRY_GAP=6000, started=Date.now();
+  let reply=null, attempt=0;
+  while(Date.now()-started<MAX_WAIT){
+    attempt++;
+    try{
+      const r=await fetch(BACKEND+"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const d=await r.json();
+      reply=d.reply||(d.error?"⚠️ "+d.error:"No response.");
+      break;
+    }catch(e){
+      if(Date.now()-started+RETRY_GAP<MAX_WAIT) await new Promise(rs=>setTimeout(rs,RETRY_GAP));
+      else break;
+    }
+  }
+  return reply||"⚠️ Service temporarily unavailable. The server may be waking up — try again in ~30s.";
+}
 
 /* ══════════ FILE PROCESSING ══════════ */
 const FILE_ICONS={
@@ -680,6 +739,63 @@ function AdminPanel({onBack,t,dark,toggleTheme}){
   );
 }
 
+/* ══════════ REVIEW MODAL ══════════ */
+function ReviewModal({t,dark,isRegistered,onClose,onGenerate}){
+  const [c,setC]=useState({topic:"",field:"",journal:"",reviewType:"Narrative",spelling:"British English",citePct:"50",totalRefs:"40–60",wordCount:"6,000–8,000",numTables:"3",numFigures:"3",keywords:"you generate",special:"",abstractType:"Structured",audience:"scholars"});
+  const up=(k,v)=>setC(p=>({...p,[k]:v}));
+  const lbl={display:"block",fontSize:12,fontWeight:700,color:t.text,margin:"11px 0 4px"};
+  const inp={width:"100%",padding:"9px 11px",borderRadius:10,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontFamily:"'Times New Roman', Times, serif",fontSize:14,boxSizing:"border-box"};
+  const go=()=>{ if(!c.topic.trim()||!c.journal.trim())return; onGenerate(c); };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}} onPointerDown={onClose}>
+      <div onPointerDown={e=>e.stopPropagation()} style={{background:dark?"#111113":t.card,borderRadius:22,border:`1px solid ${t.border}`,maxWidth:440,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(0,0,0,.5)",animation:"popIn .3s ease"}}>
+        <div style={{background:"linear-gradient(135deg,#4A7A2E,#8B7218)",padding:"20px 22px"}}>
+          <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:19,color:"#FFF"}}>◈ Review Article Engine</div>
+          <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",marginTop:3}}>APA 7th · humanized · journal-ready</div>
+        </div>
+        <div style={{padding:"18px 22px"}}>
+          <div style={{padding:"10px 12px",borderRadius:11,marginBottom:6,background:isRegistered?"rgba(74,122,46,.09)":"rgba(139,114,24,.10)",border:`1px solid ${isRegistered?"rgba(74,122,46,.3)":"rgba(139,114,24,.32)"}`,fontSize:12.5,color:t.text,lineHeight:1.5}}>
+            {isRegistered?"✓ Registered access: full article — all sections, tables, figures and the complete reference list. Use Continue to extend a long paper.":"○ Free preview: title, abstract and introduction only. Log in or register for the full paper."}
+          </div>
+          <label style={lbl}>Topic / working title *</label>
+          <input style={inp} value={c.topic} onChange={e=>up("topic",e.target.value)} placeholder="e.g., Competency-based education in East Africa"/>
+          <label style={lbl}>Target journal *</label>
+          <input style={inp} value={c.journal} onChange={e=>up("journal",e.target.value)} placeholder="e.g., WAMDEVIN IJMDC"/>
+          <label style={lbl}>Field / discipline</label>
+          <input style={inp} value={c.field} onChange={e=>up("field",e.target.value)} placeholder="e.g., computer education"/>
+          <div style={{display:"flex",gap:10}}>
+            <div style={{flex:1}}><label style={lbl}>Review type</label>
+              <select style={inp} value={c.reviewType} onChange={e=>up("reviewType",e.target.value)}>{["Narrative","Systematic","Scoping","Integrative","Bibliometric"].map(o=><option key={o}>{o}</option>)}</select></div>
+            <div style={{flex:1}}><label style={lbl}>Spelling</label>
+              <select style={inp} value={c.spelling} onChange={e=>up("spelling",e.target.value)}>{["British English","American English"].map(o=><option key={o}>{o}</option>)}</select></div>
+          </div>
+          {isRegistered&&(
+            <div>
+              <div style={{display:"flex",gap:10}}>
+                <div style={{flex:1}}><label style={lbl}>Journal cites %</label><input style={inp} value={c.citePct} onChange={e=>up("citePct",e.target.value)}/></div>
+                <div style={{flex:1}}><label style={lbl}>Total refs</label><input style={inp} value={c.totalRefs} onChange={e=>up("totalRefs",e.target.value)}/></div>
+                <div style={{flex:1}}><label style={lbl}>Words</label><input style={inp} value={c.wordCount} onChange={e=>up("wordCount",e.target.value)}/></div>
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <div style={{flex:1}}><label style={lbl}>Tables</label><input style={inp} value={c.numTables} onChange={e=>up("numTables",e.target.value)}/></div>
+                <div style={{flex:1}}><label style={lbl}>Figures</label><input style={inp} value={c.numFigures} onChange={e=>up("numFigures",e.target.value)}/></div>
+              </div>
+              <label style={lbl}>Keywords</label>
+              <input style={inp} value={c.keywords} onChange={e=>up("keywords",e.target.value)}/>
+              <label style={lbl}>Special requirements</label>
+              <input style={inp} value={c.special} onChange={e=>up("special",e.target.value)} placeholder="e.g., PRISMA 2020, ethics statement"/>
+            </div>
+          )}
+          <button onPointerDown={go} style={{width:"100%",marginTop:16,padding:"13px",borderRadius:12,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 18px rgba(74,122,46,.32)"}}>
+            {isRegistered?"Generate full article":"Generate free preview"}
+          </button>
+          <button onPointerDown={onClose} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:11,background:"transparent",border:`1px solid ${t.border}`,color:t.muted,fontSize:13.5,cursor:"pointer"}}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════ MAIN APP ══════════ */
 function App(){
   const [view,setView]           = useState("loading");
@@ -695,6 +811,8 @@ function App(){
   const [sideOpen,setSide]       = useState(window.innerWidth>=720);
   const [showLimit,setShowLimit] = useState(false);
   const [showWhatsNew,setShowWhatsNew] = useState(false);
+  const [showReview,setShowReview] = useState(false);
+  const [lastReviewCfg,setLastReviewCfg] = useState(null);
   const [toast,setToast]         = useState("");
   const [mobile,setMobile]       = useState(window.innerWidth<720);
 
@@ -815,6 +933,49 @@ function App(){
     setBusy(false);
   },[input,attachment,busy,msgs,agent,user]);
 
+  /* ── REVIEW ARTICLE GENERATION ── */
+  const genReview=useCallback(async(cfg)=>{
+    setShowReview(false);
+    if(user?.role!=="admin"&&limitHit()){setShowLimit(true);return;}
+    const sch=AGENTS.find(a=>a.id==="scholar");
+    const isReg=!!user&&!isGuest;
+    setLastReviewCfg(isReg?cfg:null);
+    setAgent(sch);
+    const key=user?`adl-m-${user.id}-scholar`:`adl-gm-scholar`;
+    const base=ls.get(key)||[];
+    const cmd=`Generate a ${cfg.reviewType} review article on "${cfg.topic}" for the journal "${cfg.journal}". Follow the system instructions exactly.`;
+    const hist=[...base,{role:"user",content:"📝 "+cmd,timestamp:new Date().toISOString()}];
+    ls.set(key,hist.slice(-80));
+    setConvs(p=>({...p,scholar:hist}));
+    setBusy(true);
+    if(user?.role!=="admin")bumpUsage();
+    const ses=ls.get("adl-ses")||{};
+    const sys=buildReviewSystem(cfg,isReg?"full":"preview");
+    const reply=await chatRequest({messages:[{role:"user",content:cmd}],systemPrompt:sys,maxTokens:isReg?3500:900,model:isReg?HEAVY_MODEL:undefined,username:ses.username||null,sessionToken:ses.sessionToken||null});
+    const fin=[...hist,{role:"assistant",content:reply,timestamp:new Date().toISOString()}];
+    ls.set(key,fin.slice(-80));
+    setConvs(p=>({...p,scholar:fin}));
+    setBusy(false);
+  },[user,isGuest]);
+
+  const continueReview=useCallback(async()=>{
+    if(!lastReviewCfg)return;
+    if(user?.role!=="admin"&&limitHit()){setShowLimit(true);return;}
+    const key=user?`adl-m-${user.id}-scholar`:`adl-gm-scholar`;
+    const base=ls.get(key)||[];
+    const apiMsgs=base.slice(-6).map(m=>({role:m.role,content:(m.content||"").replace(/^📝 /,"")}));
+    apiMsgs.push({role:"user",content:"Continue the review article from exactly where it stopped. Do not repeat any earlier text or headings."});
+    setBusy(true);
+    if(user?.role!=="admin")bumpUsage();
+    const ses=ls.get("adl-ses")||{};
+    const sys=buildReviewSystem(lastReviewCfg,"full");
+    const reply=await chatRequest({messages:apiMsgs,systemPrompt:sys,maxTokens:3500,model:HEAVY_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null});
+    const fin=[...base,{role:"assistant",content:reply,timestamp:new Date().toISOString()}];
+    ls.set(key,fin.slice(-80));
+    setConvs(p=>({...p,scholar:fin}));
+    setBusy(false);
+  },[lastReviewCfg,user]);
+
   const clearChat=()=>{setConvs(p=>({...p,[agent.id]:[]}));ls.del(user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`);showT("Chat cleared");};
   const exportChat=()=>{
     if(!msgs.length){showT("Nothing to export.");return;}
@@ -850,6 +1011,7 @@ function App(){
     <>
     <style>{`body,#root{background:${t.bg}} .md code{background:${dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.06)"}} .md pre{background:${dark?"#0F0F11":"#EDE8DF"};border:1px solid ${t.border}} .md .h1,.md .h2,.md .h3{color:${t.text}} textarea::placeholder,input::placeholder{color:${t.dim}}`}</style>
     {showWhatsNew&&<WhatsNewModal t={t} dark={dark} onClose={()=>{ls.set(WHATS_NEW_KEY,true);setShowWhatsNew(false);}}/>}
+    {showReview&&<ReviewModal t={t} dark={dark} isRegistered={!!user&&!isGuest} onClose={()=>setShowReview(false)} onGenerate={genReview}/>}
     {showLimit&&<LimitModal t={t} dark={dark} onClose={()=>setShowLimit(false)}/>}
     <div style={{position:"fixed",top:"-25%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:`radial-gradient(circle,${agent.color}0A,transparent 70%)`,pointerEvents:"none",zIndex:0,animation:"orb1 14s ease-in-out infinite"}}/>
     <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(74,122,46,.05),transparent 70%)",pointerEvents:"none",zIndex:0,animation:"orb2 18s ease-in-out infinite"}}/>
@@ -887,6 +1049,8 @@ function App(){
             {!mobile&&<>{AGENTS.map(a=><button key={a.id} onPointerDown={()=>setAgent(a)} title={a.name} style={{width:30,height:30,borderRadius:8,background:agent.id===a.id?`${a.color}14`:t.inp,border:agent.id===a.id?`1.5px solid ${a.color}32`:`1px solid ${t.border}`,color:a.color,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{a.icon}</button>)}
             <div style={{width:1,height:20,background:t.border,margin:"0 2px"}}/></>}
             <button onPointerDown={toggleTheme} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>
+            {agent.id==="scholar"&&<button onPointerDown={()=>setShowReview(true)} title="Review Article Engine" style={{height:36,padding:"0 11px",borderRadius:9,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'Times New Roman', Times, serif",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>◈{mobile?"":" Review"}</button>}
+            {agent.id==="scholar"&&lastReviewCfg&&!!user&&!isGuest&&<button onPointerDown={continueReview} title="Continue the article" style={{height:36,padding:"0 11px",borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>⏭{mobile?"":" Continue"}</button>}
             <button onPointerDown={exportChat} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:t.muted,cursor:"pointer"}}>📄</button>
             {!mobile&&<button onPointerDown={clearChat} style={{height:36,padding:"0 12px",borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:13,cursor:"pointer"}}>Clear</button>}
           </div>
