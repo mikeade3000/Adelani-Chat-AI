@@ -17,7 +17,9 @@ const SITE_URL     = process.env.FRONTEND_URL   || "https://mikeade3000.github.i
 const ADMIN_SECRET = process.env.ADMIN_SECRET   || "adelani-admin-2024";
 const ADMIN_PASS   = process.env.ADMIN_PASSWORD || "adelani2024";
 const OR_API       = "https://openrouter.ai/api/v1/chat/completions";
-const CHAT_MODEL   = "meta-llama/llama-3.1-8b-instruct"; // text model
+const CHAT_MODEL   = process.env.CHAT_MODEL  || "meta-llama/llama-3.1-8b-instruct";   // default text model (cheap/fast)
+const HEAVY_MODEL  = process.env.HEAVY_MODEL || "meta-llama/llama-3.1-70b-instruct";  // heavy model for registered Scholar generation
+const ALLOWED_TEXT_MODELS = new Set([CHAT_MODEL, HEAVY_MODEL]); // only these may be requested via the `model` field
 const VISION_MODELS = [
   "google/gemini-flash-1.5",                   // primary — always available, ~$0.0001/image
   "openai/gpt-4o-mini",                        // fallback — reliable, ~$0.0002/image
@@ -146,7 +148,7 @@ app.get("/api/status/:username", (req, res) => {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 app.post("/api/chat", async (req, res) => {
-  const { messages, systemPrompt, sessionToken, username, hasImage } = req.body;
+  const { messages, systemPrompt, sessionToken, username, hasImage, maxTokens, model } = req.body;
   if (!messages?.length) return res.status(400).json({ error: "No messages provided." });
 
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -163,9 +165,20 @@ app.post("/api/chat", async (req, res) => {
 
   const orMsgs = systemPrompt ? [{ role: "system", content: systemPrompt }, ...messages] : messages;
 
-  // Choose model — switch to vision-capable model when an image is attached
+  // Choose model.
+  //  • Image present  → vision model list (unchanged).
+  //  • `model` field requested AND on the allowlist → honor it (this is how the
+  //    registered-user heavy Scholar generation opts into the 70B model). When the
+  //    heavy model is chosen, fall back to the cheap model if it errors.
+  //  • Otherwise       → default cheap text model.
   const useVision = hasImage || messages.some(m => Array.isArray(m.content));
-  const modelList = useVision ? VISION_MODELS : [CHAT_MODEL];
+  const requested = (typeof model === "string" && ALLOWED_TEXT_MODELS.has(model)) ? model : CHAT_MODEL;
+  const modelList = useVision
+    ? VISION_MODELS
+    : (requested === HEAVY_MODEL ? [HEAVY_MODEL, CHAT_MODEL] : [CHAT_MODEL]);
+
+  // Honor a per-request token budget (e.g. heavier output for registered users), clamped for safety.
+  const tokenBudget = Math.min(Math.max(parseInt(maxTokens) || 1500, 256), 4000);
 
   let lastErr = "";
   for (const model of modelList) {
@@ -179,7 +192,7 @@ app.post("/api/chat", async (req, res) => {
           "HTTP-Referer":  SITE_URL,
           "X-Title":       "Adelani AI Chat"
         },
-        body: JSON.stringify({ model, messages: orMsgs, max_tokens: 1500, temperature: 0.7 })
+        body: JSON.stringify({ model, messages: orMsgs, max_tokens: tokenBudget, temperature: 0.7 })
       });
 
       const data = await r.json();
