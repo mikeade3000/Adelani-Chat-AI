@@ -7,10 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Adelani AI Chat</title>
 <!-- Times New Roman loaded from system — no external font needed -->
-<!-- Versions PINNED (do not use unversioned URLs — unpkg serving Babel 8 breaks the app). -->
-<script src="https://unpkg.com/[email protected]/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/[email protected]/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/[email protected]/babel.min.js" crossorigin></script>
+<!-- Libraries bundled LOCALLY (React 18.3.1, ReactDOM 18.3.1, Babel 7.29.7).
+     No external CDN — loads reliably even on low-connectivity networks. -->
+<script src="./vendor/react.production.min.js"></script>
+<script src="./vendor/react-dom.production.min.js"></script>
+<script src="./vendor/babel.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body,#root{height:100%;overflow:hidden}
