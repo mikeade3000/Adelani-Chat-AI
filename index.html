@@ -7,9 +7,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Adelani AI Chat</title>
 <!-- Times New Roman loaded from system — no external font needed -->
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- Versions PINNED (do not use unversioned URLs — unpkg serving Babel 8 breaks the app). -->
+<script src="https://unpkg.com/[email protected]/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/[email protected]/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/[email protected]/babel.min.js" crossorigin></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body,#root{height:100%;overflow:hidden}
@@ -76,6 +77,48 @@ button:active{transform:scale(0.96)}
 </head>
 <body>
 <div id="root"></div>
+
+<!-- ══════════ SAFETY NET: never show a silent blank page again ══════════ -->
+<script>
+(function(){
+  function showError(title, detail){
+    var r = document.getElementById("root");
+    if(!r || r.getAttribute("data-mounted")==="1") return;
+    r.innerHTML =
+      '<div style="max-width:560px;margin:60px auto;padding:24px;font-family:Times New Roman,serif;'
+      + 'background:#FBF8F1;border:1px solid #E2D9CA;border-radius:12px;color:#1A1208;line-height:1.55">'
+      + '<div style="font-size:22px;font-weight:700;margin-bottom:8px">Adelani AI — startup problem</div>'
+      + '<div style="color:#7A7070;margin-bottom:14px">'+title+'</div>'
+      + '<pre style="white-space:pre-wrap;background:#EDE8DF;padding:12px;border-radius:8px;font-size:12.5px;'
+      + 'font-family:monospace;color:#6b1a1a;overflow:auto;max-height:200px">'+(detail||"")+'</pre>'
+      + '<div style="margin-top:14px;font-size:13.5px;color:#7A7070">Try a hard refresh (Ctrl+Shift+R). '
+      + 'If it persists, the details above pinpoint the cause.</div></div>';
+  }
+  // Catch any script/runtime error during startup
+  window.addEventListener("error", function(e){
+    showError("A script failed to load or run.", (e.message||"")+"\n"+(e.filename||""));
+  }, true);
+  window.addEventListener("unhandledrejection", function(e){
+    showError("A background task failed.", (e.reason && (e.reason.stack||e.reason.message)) || String(e.reason));
+  });
+  // Watchdog: if React hasn't mounted in 8s, Babel/CDN probably failed
+  window.__adelaniWatchdog = setTimeout(function(){
+    var r = document.getElementById("root");
+    if(r && r.getAttribute("data-mounted")!=="1"){
+      var babelMissing = (typeof Babel === "undefined");
+      var reactMissing = (typeof React === "undefined");
+      showError(
+        "The app did not start within 8 seconds.",
+        (reactMissing ? "• React failed to load from the CDN.\n" : "")
+        + (babelMissing ? "• Babel failed to load from the CDN (check the pinned version).\n" : "")
+        + (!babelMissing && !reactMissing ? "• Libraries loaded, but the app code did not run.\nOpen the browser console for the exact line." : "")
+        + "\nCheck your internet connection and that unpkg.com is reachable."
+      );
+    }
+  }, 8000);
+})();
+</script>
+
 <script type="text/babel" data-presets="react">
 const {useState,useEffect,useRef,useCallback} = React;
 
@@ -1182,6 +1225,12 @@ function App(){
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+/* Tell the safety-net watchdog the app started successfully */
+(function(){
+  var r = document.getElementById("root");
+  if(r) r.setAttribute("data-mounted","1");
+  if(window.__adelaniWatchdog) clearTimeout(window.__adelaniWatchdog);
+})();
 </script>
 </body>
 </html>
