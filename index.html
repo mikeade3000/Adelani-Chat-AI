@@ -162,7 +162,9 @@ const AGENTS=[
   {id:"ubuntu", name:"Ubuntu", icon:"◉",role:"African Languages & Culture", color:"#4A7A2E",
    system:"You are Ubuntu. Expert in African languages, cultures, histories, and philosophies. Analyse any shared documents or images with cultural sensitivity."},
   {id:"nexus",  name:"Nexus",  icon:"⊕",role:"Live Web Research",           color:"#4A7A2E",web:true,
-   system:"You are Nexus, Adelani AI Chat's live research agent. Search the internet in real time. Synthesize results into clear responses and cite sources. Analyse any shared files too."}
+   system:"You are Nexus, Adelani AI Chat's live research agent. Search the internet in real time. Synthesize results into clear responses and cite sources. Analyse any shared files too."},
+  {id:"studio", name:"Grace" , icon:"◭",role:"Design · Slides & Graphics",  color:"#4A7A2E",design:true,
+   system:"You are Grace, Adelani AI Chat's design agent. You create PowerPoint presentations and graphics, and can redesign uploaded slides, PDFs or images. Be visual, structured and creative."}
 ];
 
 /* ══════════ REVIEW ARTICLE ENGINE ══════════ */
@@ -399,6 +401,52 @@ async function processFile(file){
   }
 }
 
+/* ══════════ DESIGN STUDIO ══════════ */
+/* Image generation uses Pollinations (free, no API key). To switch to a paid
+   provider (Stability / OpenAI), route through your Render backend instead and
+   replace pollImageURL with a fetch to that route. */
+const IMAGE_MODEL = "flux";
+function pollImageURL(prompt,w,h){
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w||1024}&height=${h||1024}&nologo=true&model=${IMAGE_MODEL}&seed=${Math.floor(Math.random()*1e6)}`;
+}
+async function fetchImageObjectURL(url){
+  try{const r=await fetch(url,{mode:"cors"});if(!r.ok)throw 0;const b=await r.blob();return URL.createObjectURL(b);}catch{return url;}
+}
+function parseDesignJSON(raw){
+  let s=(raw||"").trim().replace(/^```(json)?/i,"").replace(/```$/,"").trim();
+  const a=s.indexOf("{"), b=s.lastIndexOf("}");
+  if(a>=0&&b>a) s=s.slice(a,b+1);
+  return JSON.parse(s);
+}
+/* Build a .pptx from a spec using PptxGenJS (bundled locally). Returns {url,filename}. */
+async function buildDeck(spec){
+  await loadScript("./vendor/pptxgen.bundle.js");
+  const P=window.PptxGenJS;
+  const pptx=new P();
+  pptx.defineLayout({name:"AD169",width:13.333,height:7.5});
+  pptx.layout="AD169";
+  const GREEN="4A7A2E",GOLD="8B7218",INK="1A1208",CREAM="FBF8F1";
+  const title=spec.title||"Untitled Presentation";
+  const ts=pptx.addSlide(); ts.background={color:CREAM};
+  ts.addShape(pptx.ShapeType.rect,{x:0,y:0,w:13.333,h:0.35,fill:{color:GREEN}});
+  ts.addShape(pptx.ShapeType.rect,{x:0,y:7.15,w:13.333,h:0.35,fill:{color:GOLD}});
+  ts.addText(String(title),{x:0.8,y:2.5,w:11.7,h:1.7,fontFace:"Times New Roman",fontSize:40,bold:true,color:GREEN,align:"center"});
+  if(spec.subtitle) ts.addText(String(spec.subtitle),{x:0.8,y:4.3,w:11.7,h:0.9,fontFace:"Times New Roman",fontSize:20,color:INK,align:"center"});
+  ts.addText("Adelani AI Chat · Grace",{x:0.8,y:6.5,w:11.7,h:0.4,fontFace:"Times New Roman",fontSize:12,color:GOLD,align:"center"});
+  (spec.slides||[]).slice(0,30).forEach(s=>{
+    const sl=pptx.addSlide(); sl.background={color:"FFFFFF"};
+    sl.addShape(pptx.ShapeType.rect,{x:0,y:0,w:13.333,h:1.1,fill:{color:GREEN}});
+    sl.addText(String(s.title||""),{x:0.6,y:0.12,w:12.1,h:0.86,fontFace:"Times New Roman",fontSize:26,bold:true,color:"FFFFFF",valign:"middle"});
+    const bullets=(s.bullets||[]).map(b=>({text:String(b),options:{bullet:{code:"2022"},fontSize:18,color:INK,fontFace:"Times New Roman",paraSpaceAfter:10}}));
+    if(bullets.length) sl.addText(bullets,{x:0.85,y:1.5,w:11.6,h:5.4,valign:"top"});
+    if(s.notes) sl.addNotes(String(s.notes));
+    sl.addShape(pptx.ShapeType.rect,{x:0,y:7.35,w:13.333,h:0.15,fill:{color:GOLD}});
+  });
+  const blob=await pptx.write("blob");
+  const filename=(String(title).replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-").slice(0,50)||"presentation")+".pptx";
+  return {url:URL.createObjectURL(blob),filename};
+}
+
 /* ══════════ MARKDOWN ══════════ */
 function md(raw,accent,dark){
   const cc=dark?"rgba(255,255,255,.09)":"rgba(0,0,0,.07)";
@@ -513,7 +561,7 @@ function WhatsNewModal({t,dark,onClose}){
                 ["📎","Tap the paperclip button in the chat input"],
                 ["📁","Select any supported file from your device"],
                 ["💬","Type your question or just press send"],
-                ["🤖","Any of the 6 agents will read & analyse the file"],
+                ["🤖","Any of the 7 agents will read & analyse the file"],
               ].map(([icon,text])=>(
                 <div key={text} style={{display:"flex",gap:9,alignItems:"flex-start"}}>
                   <span style={{fontSize:15,flexShrink:0}}>{icon}</span>
@@ -584,6 +632,22 @@ function Bubble({msg,agent,t,dark}){
           <div className="md" style={{padding:"12px 16px",borderRadius:u?"18px 18px 4px 18px":"18px 18px 18px 4px",background:u?`linear-gradient(135deg,${agent.color}E0,${agent.color}A0)`:t.bub,color:u?"#FFF":t.text,fontSize:15.5,lineHeight:1.75,wordBreak:"break-word",border:u?"none":`1px solid ${t.bubBrd}`,boxShadow:u?`0 3px 16px ${agent.color}30`:"0 2px 6px rgba(0,0,0,.08)",WebkitUserSelect:"text",MozUserSelect:"text",userSelect:"text",cursor:"text"}}
             dangerouslySetInnerHTML={u?undefined:{__html:md(msg.content,agent.color,dark)}}>
             {u?msg.content:undefined}
+          </div>
+        )}
+        {/* Studio design result — preview + download (additive) */}
+        {msg.design&&(
+          <div style={{marginTop:8,marginBottom:4,padding:12,borderRadius:12,background:t.card,border:`1px solid ${t.border}`,maxWidth:340,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
+            {msg.design.preview&&<img src={msg.design.preview} alt="" style={{width:"100%",borderRadius:8,marginBottom:10,border:`1px solid ${t.border}`,display:"block"}}/>}
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontSize:22}}>{msg.design.kind==="image"?"🎨":"📊"}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:14,color:t.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{msg.design.filename}</div>
+                <div style={{fontSize:11.5,color:t.muted}}>{msg.design.kind==="image"?"Graphic · PNG":"Presentation · PPTX"}</div>
+              </div>
+              <a href={msg.design.url} download={msg.design.filename} target="_blank" rel="noopener" style={{textDecoration:"none"}}>
+                <button style={{height:34,padding:"0 14px",borderRadius:9,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'Times New Roman', Times, serif",cursor:"pointer",whiteSpace:"nowrap"}}>⬇ Save</button>
+              </a>
+            </div>
           </div>
         )}
         <div style={{fontSize:11.5,color:t.muted,marginTop:3}}>{fmtTime(msg.timestamp)}</div>
@@ -685,7 +749,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
               <div style={{textAlign:"center"}}>
                 <Globe/>
                 <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:22,color:t.text,marginBottom:9}}>Try Adelani AI Free</div>
-                <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Access all 6 AI agents instantly.<br/>Upload documents, images & more.</div>
+                <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Access all 7 AI agents instantly.<br/>Upload documents, images & more.</div>
                 <button onPointerDown={onGuest} style={bigBtn}>Explore as Guest →</button>
                 <div style={{color:t.muted,fontSize:13,marginTop:13}}>10 free messages per day</div>
               </div>
@@ -704,7 +768,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
               <div style={{textAlign:"center"}}>
                 <div style={{fontSize:50,marginBottom:14}}>⭐</div>
                 <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:20,color:t.text,marginBottom:9}}>Adelani Premium</div>
-                <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Unlimited messages · All 6 agents<br/>Priority AI · No daily limits.</div>
+                <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Unlimited messages · All 7 agents<br/>Priority AI · No daily limits.</div>
                 <div style={{background:"rgba(37,211,102,.07)",border:"1.5px solid rgba(37,211,102,.28)",borderRadius:15,padding:"18px",marginBottom:18,textAlign:"center"}}>
                   <div style={{fontSize:11.5,color:t.muted,letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:9}}>Contact to Upgrade</div>
                   <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16.5,color:t.text,marginBottom:5}}>Dr. Michael Adelani Adewusi</div>
@@ -896,11 +960,62 @@ function App(){
   };
 
   /* ── SEND ── */
+  /* ── STUDIO DESIGN GENERATION ── */
+  const handleDesign=useCallback(async(text,att)=>{
+    let source="";
+    if(att?.type==="document") source="\n\nSOURCE MATERIAL (from uploaded "+(att.ext||"file")+"):\n"+att.content;
+    else if(att?.type==="image") source="\n\n(The user attached an image named "+(att.name||"image")+" as reference.)";
+    const userText=text||(att?("Design something based on the uploaded "+(att.ext||"file")+"."):"");
+
+    const um={role:"user",timestamp:new Date().toISOString(),content:userText||"(design request)",
+      fileName:att?.name||null,fileIcon:att?.icon||null,fileExt:att?.ext||null,fileSize:att?.size||null,
+      image:att?.type==="image"?att.data:null};
+    const hist=[...msgs,um];
+    setConvs(p=>({...p,[agent.id]:hist}));
+    setInput("");setAttachment(null);setBusy(true);
+    if(taRef.current)taRef.current.style.height="auto";
+    if(user?.role!=="admin")bumpUsage();
+
+    const push=(content,design)=>setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content,design,timestamp:new Date().toISOString()}]}));
+    push("🎨 Designing… this can take a moment.",null);
+
+    const SYS="You are the Design Studio engine for Adelani AI. The user wants EITHER a presentation OR a graphic/image. Decide which, then reply with ONLY valid JSON — no markdown, no backticks, no commentary.\n\nPRESENTATION format:\n{\"type\":\"deck\",\"title\":\"...\",\"subtitle\":\"...\",\"slides\":[{\"title\":\"...\",\"bullets\":[\"...\"],\"notes\":\"...\"}]}\nMake 5-12 slides, 3-6 short bullets each, plus brief speaker notes.\n\nGRAPHIC format:\n{\"type\":\"image\",\"prompt\":\"a rich, detailed image-generation prompt\",\"width\":1024,\"height\":1024,\"caption\":\"short caption\"}\nUse 1024x1024 unless a banner (1280x720) or portrait (768x1024) is clearly wanted.\n\nIf source material is provided, base the design on it. Output JSON only.";
+
+    const ses=ls.get("adl-ses")||{};
+    let reply=null;
+    try{ reply=await chatRequest({messages:[{role:"user",content:userText+source}],systemPrompt:SYS,maxTokens:2200,model:HEAVY_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null}); }catch(e){ reply=null; }
+
+    let spec=null;
+    try{ spec=parseDesignJSON(reply); }catch(e){ spec=null; }
+    if(!spec||!spec.type){
+      push("⚠️ I couldn't structure that design. Try describing it differently — e.g. \"Make a 6-slide deck on climate-smart agriculture\" or \"Design a poster for our graduation event\".",null);
+      setBusy(false); return;
+    }
+    try{
+      if(spec.type==="deck"){
+        const {url,filename}=await buildDeck(spec);
+        push("✅ Your presentation \""+(spec.title||"Untitled")+"\" is ready — "+((spec.slides||[]).length+1)+" slides. Tap Save to download the .pptx.",{kind:"pptx",url,filename});
+      } else if(spec.type==="image"){
+        const gen=pollImageURL(spec.prompt,spec.width,spec.height);
+        const preview=await fetchImageObjectURL(gen);
+        push((spec.caption?("🎨 "+spec.caption):"🎨 Here's your graphic.")+" — tap Save to download.",{kind:"image",url:preview,filename:((spec.caption||"graphic").replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-").slice(0,40)||"graphic")+".png",preview});
+      } else {
+        push("⚠️ Unsupported design type. Ask for a presentation or a graphic.",null);
+      }
+    }catch(e){
+      push("⚠️ Something went wrong building the file: "+(e?.message||e)+". Please try again.",null);
+    }
+    setBusy(false);
+  },[msgs,agent,user]);
+
   const send=useCallback(async()=>{
     const text=(input||"").trim();
     if(!text&&!attachment)return;
     if(busy)return;
     if(user?.role!=="admin"&&limitHit()){setShowLimit(true);return;}
+
+    /* Studio design agent uses its own generation flow */
+    if(agent.design){ await handleDesign(text,attachment); return; }
 
     /* Build user message */
     const msgMeta={
