@@ -126,6 +126,11 @@ const {useState,useEffect,useRef,useCallback} = React;
 /* ══════════ CONFIG ══════════ */
 const BACKEND     = "https://adelani-ai-backend.onrender.com";
 const HEAVY_MODEL = "meta-llama/llama-3.1-70b-instruct"; // used only for registered-user full Scholar articles
+/* Grace's brain. A stronger model = far better decks. Change this one line to upgrade.
+   Strong picks on OpenRouter (2026): "deepseek/deepseek-chat" (great value),
+   "anthropic/claude-sonnet-4.6", "openai/gpt-5.5", "google/gemini-2.5-pro",
+   "qwen/qwen3.6-plus". If the chosen model errors, Grace auto-falls back to HEAVY_MODEL. */
+const GRACE_MODEL = "deepseek/deepseek-chat";
 const DAILY_LIMIT = 10;
 const WA_LINK     = "https://wa.me/2348115800375?text=" + encodeURIComponent("Hello Dr. Adewusi, I'd like to upgrade to Adelani AI Premium.");
 
@@ -444,149 +449,221 @@ async function buildDeck(spec){
   const W = size==="4:3"?10:13.333, H=7.5;
   pptx.defineLayout({name:"ADL",width:W,height:H}); pptx.layout="ADL";
 
-  /* Theme — Grace fills this to match the user's request; Adelani green/gold are only the defaults. */
-  const th = spec.theme||spec.design||{};
-  const FONT   = th.font || "Calibri";
-  const TFONT  = th.titleFont || FONT;
-  const PRIMARY= hex(th.primary||"4A7A2E");
-  const ACCENT = hex(th.accent ||"8B7218");
-  const BG     = hex(th.bg     ||"FFFFFF");
-  const TITLEBG= hex(th.titleBg||"FBF8F1");
-  const TEXT   = hex(th.text   ||"1A1208");
-  const hSize  = num(th.headingSize,28);
-  const bSize  = num(th.bodySize,18);
-  const onDark = (parseInt(BG,16) < 0x777777);
-  const bodyOnBg = onDark ? "FFFFFF" : TEXT;
+  /* ── design tokens ── */
+  const lum = c=>{ const h=hex(c); return (parseInt(h.slice(0,2),16)*0.299+parseInt(h.slice(2,4),16)*0.587+parseInt(h.slice(4,6),16)*0.114); };
+  const isDark = c=> lum(c) < 140;
+  const SHAPE={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect",rounded:"roundRect",triangle:"triangle",chevron:"chevron"};
 
-  const SHAPE={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect","rounded":"roundRect",triangle:"triangle"};
+  /* ── curated theme presets (Grace picks one, or supplies a custom object) ── */
+  const PRESETS={
+    emerald:  {mode:"light",bg:"FFFFFF",titleBg:"F3EFE2",primary:"3D6B24",accent:"B8860B",text:"1A1208",muted:"6B6455",headFont:"Georgia",bodyFont:"Calibri"},
+    executive:{mode:"light",bg:"FFFFFF",titleBg:"0F2743",primary:"12314F",accent:"C9A227",text:"1B2733",muted:"5A6B7B",headFont:"Georgia",bodyFont:"Calibri"},
+    midnight: {mode:"dark", bg:"0B1020",titleBg:"0B1020",primary:"7CC0FF",accent:"FFB020",text:"EAF2FF",muted:"9FB3C8",headFont:"Trebuchet MS",bodyFont:"Calibri"},
+    coral:    {mode:"light",bg:"FFFDF9",titleBg:"E14B3B",primary:"E14B3B",accent:"1FA5A0",text:"2A2320",muted:"7A6E68",headFont:"Trebuchet MS",bodyFont:"Calibri"},
+    slate:    {mode:"light",bg:"FFFFFF",titleBg:"111827",primary:"1F2937",accent:"2563EB",text:"111827",muted:"6B7280",headFont:"Arial",bodyFont:"Arial"},
+    royal:    {mode:"dark", bg:"1A1130",titleBg:"1A1130",primary:"D9C36B",accent:"C084FC",text:"F3EEFF",muted:"B8A9D6",headFont:"Georgia",bodyFont:"Calibri"},
+    sunrise:  {mode:"light",bg:"FFFCF7",titleBg:"2B2D42",primary:"2B2D42",accent:"EF8354",text:"22223B",muted:"6E6A7B",headFont:"Verdana",bodyFont:"Calibri"}
+  };
+  let th;
+  if(typeof spec.theme==="string" && PRESETS[spec.theme.toLowerCase()]) th={...PRESETS[spec.theme.toLowerCase()]};
+  else if(spec.theme && typeof spec.theme==="object") th={...PRESETS.emerald,...normalizeTheme(spec.theme)};
+  else th={...PRESETS.emerald};
+  function normalizeTheme(o){ const r={}; ["mode","headFont","bodyFont"].forEach(k=>{ if(o[k])r[k]=o[k]; });
+    if(o.font){r.headFont=o.font;r.bodyFont=o.font;} if(o.titleFont)r.headFont=o.titleFont;
+    ["bg","titleBg","primary","accent","text","muted"].forEach(k=>{ if(o[k])r[k]=hex(o[k]); });
+    return r; }
+  /* explicit font override always wins */
+  if(spec.font){ th.headFont=spec.font; th.bodyFont=spec.font; }
+  const HF=th.headFont, BF=th.bodyFont;
+  const hSize=num((spec.theme&&spec.theme.headingSize)||spec.headingSize,26);
+  const bSize=num((spec.theme&&spec.theme.bodySize)||spec.bodySize,17);
 
-  /* Pre-generate every requested image in parallel (deduped, capped). */
+  /* ── pre-generate images (parallel, deduped, capped) ── */
   const prompts=[];
   if(spec.watermark) prompts.push(String(spec.watermark));
   (spec.slides||[]).forEach(s=>{
     if(s.background&&s.background.image) prompts.push(String(s.background.image));
     if(s.image&&s.image.prompt) prompts.push(String(s.image.prompt));
-    (s.elements||[]).forEach(e=>{ if((e.kind==="image")&&e.prompt) prompts.push(String(e.prompt)); });
+    (s.elements||[]).forEach(e=>{ if(e.kind==="image"&&e.prompt) prompts.push(String(e.prompt)); });
   });
   const uniq=[...new Set(prompts)].slice(0,12);
   const IMG={};
   await Promise.all(uniq.map(async p=>{ try{ IMG[p]=await fetchImageDataURL(pollImageURL(p,1280,720)); }catch(e){ IMG[p]=null; } }));
-  const wm = spec.watermark ? IMG[String(spec.watermark)] : null;
+  const wm = spec.watermark?IMG[String(spec.watermark)]:null;
+  const footerTxt = spec.footer!==undefined?spec.footer:"Adelani AI Chat · Grace";
 
-  const footer = spec.footer!==undefined ? spec.footer : "Adelani AI Chat · Grace";
-  const addFooter = s=>{ if(footer) s.addText(String(footer),{x:0.4,y:H-0.42,w:W-0.8,h:0.32,fontFace:FONT,fontSize:10,color:ACCENT,align:"right"}); };
-  const addWM = s=>{ if(wm) s.addImage({data:wm,x:W/2-4,y:H/2-2.25,w:8,h:4.5,transparency:88}); };
+  const bulletList=(items,fs,color)=>(items||[]).map(b=>{
+    const t = (b&&typeof b==="object") ? String(b.text||"") : String(b);
+    const sub = (b&&typeof b==="object" && b.sub)?"\n"+String(b.sub):"";
+    return {text:t+sub,options:{bullet:{code:"2022"},fontSize:fs,color:hex(color),fontFace:BF,paraSpaceAfter:9,paraSpaceBefore:2,lineSpacingMultiple:1.05}};
+  });
 
-  const renderElements=(s,els)=>{
-    (els||[]).forEach(el=>{
-      const font=el.fontFace||FONT;
-      try{
-        if(el.kind==="text"){
-          s.addText(String(el.text||""),{x:num(el.x,0.5),y:num(el.y,0.5),w:num(el.w,W-1),h:num(el.h,1),
-            fontFace:font,fontSize:num(el.fontSize,18),bold:!!el.bold,italic:!!el.italic,
-            color:hex(el.color||bodyOnBg),align:el.align||"left",valign:el.valign||"top",
-            fill:el.fill?{color:hex(el.fill)}:undefined,lineSpacingMultiple:num(el.lineSpacing,1)});
-        } else if(el.kind==="bullets"){
-          const items=(el.items||[]).map(b=>({text:String(b),options:{bullet:el.numbered?{type:"number"}:{code:"2022"},
-            fontSize:num(el.fontSize,bSize),color:hex(el.color||bodyOnBg),fontFace:font,paraSpaceAfter:num(el.spaceAfter,8)}}));
-          if(items.length) s.addText(items,{x:num(el.x,0.7),y:num(el.y,1.5),w:num(el.w,W-1.4),h:num(el.h,H-2.4),valign:el.valign||"top"});
-        } else if(el.kind==="shape"){
-          const st=SHAPE[String(el.shape||"rect").toLowerCase()]||"rect";
-          s.addShape(pptx.ShapeType[st]||pptx.ShapeType.rect,{x:num(el.x,0),y:num(el.y,0),w:num(el.w,1),h:num(el.h,0.3),
-            fill:el.fill?{color:hex(el.fill),transparency:num(el.transparency,0)}:undefined,
-            line:el.lineColor?{color:hex(el.lineColor),width:num(el.lineWidth,1)}:undefined,rectRadius:el.radius?num(el.radius,0.1):undefined});
-        } else if(el.kind==="image"){
-          const data=el.prompt?IMG[String(el.prompt)]:(el.dataUrl||null);
-          if(data) s.addImage({data,x:num(el.x,1),y:num(el.y,1),w:num(el.w,4),h:num(el.h,3),transparency:num(el.transparency,0),rounding:!!el.rounding});
-        } else if(el.kind==="table"){
-          const rows=(el.rows||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:font,fontSize:num(el.fontSize,14),
-            color:ri===0?"FFFFFF":hex(el.color||TEXT),bold:ri===0,fill:ri===0?{color:PRIMARY}:{color:ri%2?"F4F1EA":"FFFFFF"},align:el.align||"left",valign:"middle"}})));
-          if(rows.length) s.addTable(rows,{x:num(el.x,0.7),y:num(el.y,1.6),w:num(el.w,W-1.4),border:{type:"solid",color:"DDDDDD",pt:0.5}});
-        }
-      }catch(e){/* skip a bad element rather than fail the whole deck */}
-    });
-  };
+  /* ── decorative helpers ── */
+  const addWM=s=>{ if(wm) s.addImage({data:wm,x:W/2-4,y:H/2-2.4,w:8,h:4.8,transparency:90}); };
+  const pageNo=(s,n)=>{ s.addText(String(n),{x:W-1.0,y:H-0.5,w:0.6,h:0.3,fontFace:BF,fontSize:9,color:th.muted,align:"right"}); };
+  const footRule=(s)=>{ s.addShape(pptx.ShapeType.rect,{x:0.6,y:H-0.55,w:W-1.2,h:0.012,fill:{color:th.muted,transparency:55}});
+    if(footerTxt) s.addText(String(footerTxt),{x:0.6,y:H-0.5,w:6,h:0.3,fontFace:BF,fontSize:9,color:th.muted,align:"left"}); };
 
-  const bulletBox=(s,items,x,y,w,h,color,fs)=>{
-    const arr=(items||[]).map(b=>({text:String(b),options:{bullet:{code:"2022"},fontSize:fs||bSize,color:hex(color||bodyOnBg),fontFace:FONT,paraSpaceAfter:8}}));
-    if(arr.length) s.addText(arr,{x,y,w,h,valign:"top"});
-  };
-
-  const slides = Array.isArray(spec.slides)&&spec.slides.length ? spec.slides : [{layout:"title",title:spec.title||"Presentation"}];
+  const slides = Array.isArray(spec.slides)&&spec.slides.length?spec.slides:[{layout:"title",title:spec.title||"Presentation"}];
+  let pageCount=0;
 
   slides.forEach((sd,idx)=>{
     const s=pptx.addSlide();
-    const layout = sd.custom||sd.elements ? "custom" : (sd.layout || (idx===0?"title":"content"));
+    const layout = sd.custom||sd.elements&&!sd.layout ? "custom" : (sd.layout||(idx===0?"title":"content"));
 
-    /* background */
-    if(sd.background&&sd.background.color) s.background={color:hex(sd.background.color)};
-    else if(sd.background&&sd.background.image&&IMG[String(sd.background.image)]) s.background={data:IMG[String(sd.background.image)]};
-    else s.background={color:(layout==="title"||layout==="section")?TITLEBG:BG};
+    /* background resolution */
+    let slideBg;
+    if(sd.background&&sd.background.color) slideBg=hex(sd.background.color);
+    else if(layout==="title"||layout==="section") slideBg=th.titleBg;
+    else slideBg=th.bg;
+    if(sd.background&&sd.background.image&&IMG[String(sd.background.image)]) s.background={data:IMG[String(sd.background.image)]};
+    else s.background={color:slideBg};
+    const darkBg=isDark(slideBg);
+    const bodyColor = darkBg?"F3F4F6":th.text;
+    const titleColor= darkBg?(th.accent):th.primary;
 
+    /* ═══ CUSTOM ═══ */
     if(layout==="custom"){
-      addWM(s); renderElements(s,sd.elements); if(sd.footer!==false) addFooter(s);
+      addWM(s); renderElements(s,sd.elements,{W,H,BF,bodyColor,IMG}); if(sd.footer!==false){footRule(s);} 
     }
-    else if(layout==="title"||layout==="section"){
+    /* ═══ COVER ═══ */
+    else if(layout==="title"){
+      const t = darkBg?"FFFFFF":th.primary;
+      const sub = darkBg?"D8E0EA":th.muted;
+      // decorative geometry
+      s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:0.45,h:H,fill:{color:th.accent}});
+      s.addShape(pptx.ShapeType.ellipse,{x:W-3.6,y:H-3.4,w:5,h:5,fill:{color:th.accent,transparency:86}});
+      s.addShape(pptx.ShapeType.ellipse,{x:W-2.2,y:-1.6,w:3.4,h:3.4,fill:{color:th.primary,transparency:darkBg?80:90}});
       addWM(s);
-      s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:W,h:0.35,fill:{color:PRIMARY}});
-      s.addShape(pptx.ShapeType.rect,{x:0,y:H-0.35,w:W,h:0.35,fill:{color:ACCENT}});
-      const big=Math.max(hSize*(layout==="title"?1.6:1.3),layout==="title"?34:28);
-      s.addText(cleanTitle(sd.title)||String(spec.title||""),{x:0.8,y:layout==="title"?2.3:2.8,w:W-1.6,h:1.8,fontFace:TFONT,fontSize:big,bold:true,color:PRIMARY,align:"center"});
-      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.8,y:4.15,w:W-1.6,h:0.8,fontFace:FONT,fontSize:bSize+4,color:TEXT,align:"center"});
+      if(spec.kicker||sd.kicker) s.addText(String(spec.kicker||sd.kicker).toUpperCase(),{x:0.95,y:1.7,w:W-2,h:0.5,fontFace:BF,fontSize:13,bold:true,color:th.accent,charSpacing:3});
+      s.addText(cleanTitle(sd.title)||String(spec.title||""),{x:0.9,y:2.35,w:W-2.4,h:1.9,fontFace:HF,fontSize:num(sd.titleSize,46),bold:true,color:t,align:"left",lineSpacingMultiple:0.98});
+      s.addShape(pptx.ShapeType.rect,{x:0.97,y:4.35,w:2.4,h:0.07,fill:{color:th.accent}});
+      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.95,y:4.6,w:W-2.6,h:0.9,fontFace:BF,fontSize:bSize+5,color:sub,align:"left"});
       const fac=sd.facilitator||spec.facilitator;
-      if(fac&&layout==="title") s.addText("Facilitator: "+fac,{x:0.8,y:5.05,w:W-1.6,h:0.6,fontFace:FONT,fontSize:bSize+1,italic:true,color:TEXT,align:"center"});
-      if(footer) s.addText(String(footer),{x:0.8,y:H-0.85,w:W-1.6,h:0.4,fontFace:FONT,fontSize:12,color:ACCENT,align:"center"});
+      if(fac) s.addText("Facilitator: "+fac,{x:0.95,y:5.7,w:W-2.6,h:0.5,fontFace:BF,fontSize:bSize+1,italic:true,color:sub});
+      if(footerTxt) s.addText(String(footerTxt),{x:0.95,y:H-0.62,w:W-2,h:0.35,fontFace:BF,fontSize:11,color:th.accent});
     }
+    /* ═══ SECTION DIVIDER ═══ */
+    else if(layout==="section"){
+      addWM(s);
+      pageCount++;
+      s.addText(String(sd.number||("0"+pageCount)).slice(0,2),{x:0.7,y:0.6,w:6,h:3,fontFace:HF,fontSize:200,bold:true,color:"FFFFFF",transparency:86,align:"left"});
+      s.addShape(pptx.ShapeType.rect,{x:0.95,y:4.6,w:2.4,h:0.08,fill:{color:th.accent}});
+      s.addText(cleanTitle(sd.title),{x:0.9,y:4.85,w:W-2,h:1.4,fontFace:HF,fontSize:36,bold:true,color:"FFFFFF"});
+      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.95,y:6.1,w:W-2,h:0.6,fontFace:BF,fontSize:bSize+2,color:"E8EEF5"});
+    }
+    /* ═══ QUOTE ═══ */
     else if(layout==="quote"){
-      addWM(s);
-      s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:0.25,h:H,fill:{color:ACCENT}});
-      s.addText('“'+String(sd.quote||sd.text||"")+'”',{x:1.2,y:1.8,w:W-2.4,h:3,fontFace:TFONT,fontSize:Math.max(hSize,26),italic:true,color:onDark?"FFFFFF":PRIMARY,align:"center",valign:"middle"});
-      if(sd.attribution) s.addText("— "+sd.attribution,{x:1.2,y:5,w:W-2.4,h:0.6,fontFace:FONT,fontSize:bSize,color:bodyOnBg,align:"center"});
-      addFooter(s);
+      addWM(s); pageCount++;
+      s.addText("\u201C",{x:0.5,y:0.4,w:3,h:3,fontFace:"Georgia",fontSize:160,bold:true,color:th.accent,transparency:35});
+      s.addText(String(sd.quote||sd.text||""),{x:1.4,y:2.1,w:W-2.8,h:3,fontFace:HF,fontSize:Math.max(hSize+2,28),italic:true,color:darkBg?"FFFFFF":th.primary,align:"left",valign:"middle",lineSpacingMultiple:1.1});
+      if(sd.attribution){ s.addShape(pptx.ShapeType.rect,{x:1.45,y:5.5,w:0.5,h:0.05,fill:{color:th.accent}});
+        s.addText(String(sd.attribution),{x:2.1,y:5.28,w:W-3,h:0.5,fontFace:BF,fontSize:bSize,color:bodyColor}); }
+      footRule(s); pageNo(s,pageCount);
     }
-    else { /* content, two-column, table, image-full, or plain content */
-      addWM(s);
-      s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:W,h:1.1,fill:{color:PRIMARY}});
-      s.addText(cleanTitle(sd.title),{x:0.6,y:0.12,w:W-1.2,h:0.86,fontFace:TFONT,fontSize:hSize,bold:true,color:"FFFFFF",valign:"middle"});
-      s.addShape(pptx.ShapeType.rect,{x:0,y:H-0.15,w:W,h:0.15,fill:{color:ACCENT}});
-
-      if(layout==="two-column"||sd.left||sd.right){
-        const colW=(W-1.8)/2;
-        if(sd.leftTitle) s.addText(String(sd.leftTitle),{x:0.7,y:1.35,w:colW,h:0.5,fontFace:TFONT,fontSize:bSize+3,bold:true,color:PRIMARY});
-        bulletBox(s,sd.left,0.7,sd.leftTitle?1.95:1.5,colW,H-2.6,bodyOnBg,bSize);
-        if(sd.rightTitle) s.addText(String(sd.rightTitle),{x:1.1+colW,y:1.35,w:colW,h:0.5,fontFace:TFONT,fontSize:bSize+3,bold:true,color:PRIMARY});
-        bulletBox(s,sd.right,1.1+colW,sd.rightTitle?1.95:1.5,colW,H-2.6,bodyOnBg,bSize);
+    /* ═══ STAT / IMPACT ═══ */
+    else if(layout==="stat"||sd.stats){
+      pageCount++;
+      contentHeader(s,sd);
+      const stats=(sd.stats||[]).slice(0,4);
+      const n=stats.length||1; const gap=0.4; const cw=(W-1.4-(n-1)*gap)/n;
+      stats.forEach((st,i)=>{
+        const x=0.7+i*(cw+gap);
+        s.addShape(pptx.ShapeType.roundRect,{x,y:2.2,w:cw,h:3.2,fill:{color:darkBg?"FFFFFF":th.primary,transparency:darkBg?92:94},line:{color:th.accent,width:1},rectRadius:0.08});
+        s.addText(String(st.value||""),{x,y:2.6,w:cw,h:1.4,fontFace:HF,fontSize:46,bold:true,color:th.accent,align:"center"});
+        s.addText(String(st.label||""),{x:x+0.15,y:4.0,w:cw-0.3,h:1.2,fontFace:BF,fontSize:bSize-1,color:bodyColor,align:"center",valign:"top"});
+      });
+      footRule(s); pageNo(s,pageCount);
+    }
+    /* ═══ TWO-COLUMN ═══ */
+    else if(layout==="two-column"||sd.left||sd.right){
+      pageCount++; contentHeader(s,sd);
+      const colW=(W-1.8)/2;
+      if(sd.leftTitle) s.addText(String(sd.leftTitle),{x:0.7,y:1.85,w:colW,h:0.5,fontFace:HF,fontSize:bSize+4,bold:true,color:th.accent});
+      s.addText(bulletList(sd.left,bSize,bodyColor),{x:0.7,y:sd.leftTitle?2.45:1.9,w:colW,h:H-3,valign:"top"});
+      s.addShape(pptx.ShapeType.rect,{x:0.7+colW+0.3,y:1.9,w:0.015,h:H-3.2,fill:{color:th.muted,transparency:50}});
+      if(sd.rightTitle) s.addText(String(sd.rightTitle),{x:1.1+colW,y:1.85,w:colW,h:0.5,fontFace:HF,fontSize:bSize+4,bold:true,color:th.accent});
+      s.addText(bulletList(sd.right,bSize,bodyColor),{x:1.1+colW,y:sd.rightTitle?2.45:1.9,w:colW,h:H-3,valign:"top"});
+      footRule(s); pageNo(s,pageCount);
+    }
+    /* ═══ TABLE ═══ */
+    else if(layout==="table"||sd.table){
+      pageCount++; contentHeader(s,sd);
+      const rows=(sd.table||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:BF,fontSize:bSize-2,
+        color:ri===0?"FFFFFF":th.text,bold:ri===0,fill:{color:ri===0?th.primary:(ri%2?"F4F1EA":"FFFFFF")},align:"left",valign:"middle",margin:5}})));
+      if(rows.length) s.addTable(rows,{x:0.7,y:1.95,w:W-1.4,border:{type:"solid",color:"E4E0D6",pt:0.5},rowH:0.45});
+      footRule(s); pageNo(s,pageCount);
+    }
+    /* ═══ CONTENT (default) ═══ */
+    else {
+      pageCount++; contentHeader(s,sd);
+      const img = sd.image&&sd.image.prompt?IMG[String(sd.image.prompt)]:null;
+      const side = sd.image&&sd.image.side==="left"?"left":"right";
+      if(img){
+        const iw=(W-1.4)*0.44, ih=H-2.7;
+        const ix = side==="right"? W-0.7-iw : 0.7;
+        s.addShape(pptx.ShapeType.roundRect,{x:ix-0.06,y:1.9-0.06,w:iw+0.12,h:ih+0.12,fill:{color:th.accent,transparency:80},rectRadius:0.06});
+        s.addImage({data:img,x:ix,y:1.9,w:iw,h:ih,rounding:true});
+        const tx = side==="right"?0.7:0.7+iw+0.5;
+        const tw = W-1.4-iw-0.5;
+        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize,bodyColor),{x:tx,y:1.95,w:tw,h:ih,valign:"top"});
+        else if(sd.body) s.addText(String(sd.body),{x:tx,y:1.95,w:tw,h:ih,fontFace:BF,fontSize:bSize,color:bodyColor,valign:"top",lineSpacingMultiple:1.15});
+      } else {
+        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize,bodyColor),{x:0.75,y:1.9,w:W-1.5,h:H-2.9,valign:"top"});
+        else if(sd.body) s.addText(String(sd.body),{x:0.75,y:1.9,w:W-1.5,h:H-2.9,fontFace:BF,fontSize:bSize,color:bodyColor,valign:"top",lineSpacingMultiple:1.2});
       }
-      else if(layout==="table"||sd.table){
-        const rows=(sd.table||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:FONT,fontSize:num(sd.fontSize,bSize-2),
-          color:ri===0?"FFFFFF":TEXT,bold:ri===0,fill:ri===0?{color:PRIMARY}:{color:ri%2?"F4F1EA":"FFFFFF"},align:"left",valign:"middle"}})));
-        if(rows.length) s.addTable(rows,{x:0.7,y:1.5,w:W-1.4,border:{type:"solid",color:"DDDDDD",pt:0.5}});
-      }
-      else {
-        /* content — optional side image */
-        const img = sd.image&&sd.image.prompt?IMG[String(sd.image.prompt)]:null;
-        const side = sd.image&&sd.image.side==="left" ? "left" : "right";
-        if(img){
-          const iw=(W-1.4)*0.42;
-          if(side==="right") s.addImage({data:img,x:W-0.7-iw,y:1.5,w:iw,h:H-2.4,rounding:true});
-          else               s.addImage({data:img,x:0.7,y:1.5,w:iw,h:H-2.4,rounding:true});
-          const tx = side==="right"?0.7:0.7+iw+0.4;
-          bulletBox(s,sd.bullets,tx,1.5,W-1.4-iw-0.4,H-2.4,bodyOnBg,bSize);
-          if(!(sd.bullets&&sd.bullets.length)&&sd.body) s.addText(String(sd.body),{x:tx,y:1.5,w:W-1.4-iw-0.4,h:H-2.4,fontFace:FONT,fontSize:bSize,color:bodyOnBg,valign:"top"});
-        } else {
-          bulletBox(s,sd.bullets,0.85,1.45,W-1.7,H-2.4,bodyOnBg,bSize);
-          if(!(sd.bullets&&sd.bullets.length)&&sd.body) s.addText(String(sd.body),{x:0.85,y:1.45,w:W-1.7,h:H-2.4,fontFace:FONT,fontSize:bSize,color:bodyOnBg,valign:"top"});
-        }
-      }
-      /* allow extra custom elements on top of any themed content slide */
-      if(sd.elements) renderElements(s,sd.elements);
+      if(sd.elements) renderElements(s,sd.elements,{W,H,BF,bodyColor,IMG});
+      footRule(s); pageNo(s,pageCount);
     }
     if(sd.notes) s.addNotes(String(sd.notes));
+
+    /* shared content header (title + accent underline + number badge) */
+    function contentHeader(s,sd){
+      addWM(s);
+      s.addShape(pptx.ShapeType.rect,{x:0.6,y:0.55,w:0.09,h:0.62,fill:{color:th.accent}});
+      s.addText(cleanTitle(sd.title),{x:0.85,y:0.5,w:W-1.7,h:0.75,fontFace:HF,fontSize:hSize,bold:true,color:titleColor,valign:"middle"});
+      s.addShape(pptx.ShapeType.rect,{x:0.86,y:1.32,w:1.5,h:0.045,fill:{color:th.accent}});
+      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.86,y:1.4,w:W-1.7,h:0.4,fontFace:BF,fontSize:bSize-2,italic:true,color:th.muted});
+    }
   });
 
   const blob=await pptx.write("blob");
   const filename=(String(spec.filename||spec.title||"presentation").replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-").slice(0,60)||"presentation")+".pptx";
   return {url:URL.createObjectURL(blob),filename,count:slides.length};
+}
+
+/* Render an array of freeform elements onto a slide (used by custom slides). */
+function renderElements(s,els,ctx){
+  const {W,H,BF,bodyColor,IMG}=ctx;
+  const P=window.PptxGenJS;
+  const SH={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect",rounded:"roundRect",triangle:"triangle",chevron:"chevron"};
+  (els||[]).forEach(el=>{
+    const font=el.fontFace||BF;
+    try{
+      if(el.kind==="text"){
+        s.addText(String(el.text||""),{x:num(el.x,0.5),y:num(el.y,0.5),w:num(el.w,W-1),h:num(el.h,1),
+          fontFace:font,fontSize:num(el.fontSize,18),bold:!!el.bold,italic:!!el.italic,color:hex(el.color||bodyColor),
+          align:el.align||"left",valign:el.valign||"top",charSpacing:el.charSpacing?num(el.charSpacing,0):undefined,
+          fill:el.fill?{color:hex(el.fill)}:undefined,lineSpacingMultiple:num(el.lineSpacing,1.05)});
+      } else if(el.kind==="bullets"){
+        const items=(el.items||[]).map(b=>({text:String(b),options:{bullet:el.numbered?{type:"number"}:{code:"2022"},
+          fontSize:num(el.fontSize,17),color:hex(el.color||bodyColor),fontFace:font,paraSpaceAfter:9}}));
+        if(items.length) s.addText(items,{x:num(el.x,0.7),y:num(el.y,1.5),w:num(el.w,W-1.4),h:num(el.h,H-2.4),valign:el.valign||"top"});
+      } else if(el.kind==="shape"){
+        const st=SH[String(el.shape||"rect").toLowerCase()]||"rect";
+        s.addShape(P.ShapeType[st]||P.ShapeType.rect,{x:num(el.x,0),y:num(el.y,0),w:num(el.w,1),h:num(el.h,0.3),
+          fill:el.fill?{color:hex(el.fill),transparency:num(el.transparency,0)}:undefined,
+          line:el.lineColor?{color:hex(el.lineColor),width:num(el.lineWidth,1)}:undefined,rectRadius:el.radius?num(el.radius,0.1):undefined});
+      } else if(el.kind==="image"){
+        const data=el.prompt?(IMG&&IMG[String(el.prompt)]):(el.dataUrl||null);
+        if(data) s.addImage({data,x:num(el.x,1),y:num(el.y,1),w:num(el.w,4),h:num(el.h,3),transparency:num(el.transparency,0),rounding:!!el.rounding});
+      } else if(el.kind==="table"){
+        const rows=(el.rows||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:font,fontSize:num(el.fontSize,14),
+          color:ri===0?"FFFFFF":hex(el.color||bodyColor),bold:ri===0,fill:{color:ri===0?"3D6B24":(ri%2?"F4F1EA":"FFFFFF")}}})));
+        if(rows.length) s.addTable(rows,{x:num(el.x,0.7),y:num(el.y,1.6),w:num(el.w,W-1.4),border:{type:"solid",color:"DDDDDD",pt:0.5}});
+      }
+    }catch(e){/* skip bad element */}
+  });
 }
 
 /* ══════════ MARKDOWN ══════════ */
@@ -1121,63 +1198,63 @@ function App(){
     const push=(content,design)=>setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content,design,timestamp:new Date().toISOString()}]}));
     push("🎨 Designing… this can take a moment.",null);
 
-    const SYS=`You are Grace, the design intelligence inside Adelani AI Chat. You are a thoughtful, senior presentation & graphic designer. Decide whether the user wants a PRESENTATION or a GRAPHIC/IMAGE, then reply with ONLY valid JSON — no markdown, no backticks, no commentary before or after.
+    const SYS=`You are Grace, an award-winning presentation & graphic designer inside Adelani AI Chat. Your decks look like they came from a top design studio: strong visual hierarchy, confident use of colour, generous whitespace, and a clear narrative. Decide whether the user wants a PRESENTATION or a GRAPHIC/IMAGE, then reply with ONLY valid JSON — no markdown, no backticks, no commentary.
 
 CONTEXT — use these facts, never invent other meanings:
-• Adelani AI Chat (mikeade3000.github.io/Adelani-Chat-AI) is a multi-agent AI assistant created by Dr. Michael Adelani Adewusi.
-• Its 7 agents: Asha (general), Scholar (education/research), Bizna (business), Dawa (health), Ubuntu (African languages & culture), Nexus (live web research), and Grace (design — builds downloadable PowerPoint decks and graphics, and redesigns uploaded slides/PDFs/images).
-• "Grace" ALWAYS means this design agent — NEVER a religious/theological concept. "How to use Grace" = how to use this AI design tool.
+• Adelani AI Chat (mikeade3000.github.io/Adelani-Chat-AI) is a multi-agent AI assistant by Dr. Michael Adelani Adewusi.
+• Its 7 agents: Asha, Scholar, Bizna, Dawa, Ubuntu, Nexus, and Grace (design). "Grace" ALWAYS means this design agent — NEVER a religious concept.
 
-HOW YOU WORK — you are DYNAMIC, not a template:
-• Follow EVERY explicit instruction exactly: slide count, fonts, font sizes, colours, theme/mood, structure & section order, imagery, watermarks, author/facilitator name, layout style. If the user asks for N slides, output EXACTLY N slide objects. Never prefix titles with "Slide 1:".
-• When the user is NOT specific, make excellent, tasteful design decisions yourself: choose a fitting colour theme, vary the layouts across slides, add relevant imagery, and keep text concise. Show real design intelligence — decks should not all look the same.
-• Reason about the actual content: research-grade for academic topics, punchy for pitches, warm for community topics.
+DESIGN PRINCIPLES — aim for STUNNING, not generic:
+• Craft a real narrative arc: an engaging cover, then a logical flow, ending with a strong close/call-to-action.
+• Write SHARP content: concrete, specific, insightful — never filler. Bullets are tight phrases (aim ≤10 words), not paragraphs. 3-5 bullets per slide max.
+• Create VISUAL VARIETY: alternate layouts — use section dividers between parts, a "stat" slide for key numbers, "quote" for emphasis, "two-column" for comparisons, content slides with a relevant side image. Never make every slide the same.
+• Choose a theme that fits the mood (see PRESETS). Add relevant imagery on 2-4 slides for impact (each image adds time; ≤8 per deck).
+
+OBEY EVERY EXPLICIT INSTRUCTION EXACTLY: slide count (output EXACTLY N slide objects), fonts, sizes, colours, section order, facilitator name, watermark, layout. Never prefix titles with "Slide 1:".
 
 DECK JSON:
 {
- "type":"deck",
- "title":"...",
- "filename":"optional-file-name",
- "facilitator":"optional name",
- "size":"16:9",                      // or "4:3"
- "footer":"optional footer text",    // set "" to hide; defaults to "Adelani AI Chat · Grace"
- "watermark":"optional image prompt shown faintly on every slide",
- "theme":{                           // YOU choose these to match the request/mood
-   "font":"Calibri","titleFont":"Calibri",
-   "primary":"4A7A2E","accent":"8B7218",
-   "bg":"FFFFFF","titleBg":"FBF8F1","text":"1A1208",
-   "headingSize":28,"bodySize":18
- },
- "slides":[ ...one object per slide... ]
+ "type":"deck","title":"...","kicker":"OPTIONAL small label above cover title",
+ "filename":"optional","facilitator":"optional","size":"16:9",
+ "footer":"optional (\"\" hides it)","watermark":"optional faint image prompt",
+ "theme":"emerald",              // preset NAME (below) OR a custom object
+ "slides":[ ...EXACTLY the requested count... ]
 }
-Colours are 6-digit hex WITHOUT '#'. If the user names a font/size/colour, put it in theme. A dark bg auto-switches body text to white.
+THEME PRESETS (pick the best fit): "emerald" (Adelani green/gold, academic), "executive" (navy + gold, corporate), "midnight" (dark, bold tech), "coral" (warm, energetic), "slate" (minimal, modern blue accent), "royal" (deep purple + gold, elegant), "sunrise" (clean, orange accent).
+Custom theme object: {"primary":"HEX","accent":"HEX","bg":"HEX","titleBg":"HEX","text":"HEX","font":"Calibri","headingSize":26,"bodySize":17,"mode":"light|dark"}. Colours are 6-hex WITHOUT '#'. If the user names a font/size/colour, honour it here.
 
-SLIDE TYPES (mix them for visual variety):
-• {"layout":"title","title":"...","subtitle":"...","facilitator":"..."}
-• {"layout":"section","title":"Section heading"}
-• {"layout":"content","title":"...","bullets":["...","..."],"image":{"prompt":"...","side":"right"},"notes":"..."}   // image optional
-• {"layout":"two-column","title":"...","leftTitle":"...","left":["..."],"rightTitle":"...","right":["..."],"notes":"..."}
-• {"layout":"quote","quote":"...","attribution":"...","notes":"..."}
-• {"layout":"table","title":"...","table":[["Header1","Header2"],["a","b"]],"notes":"..."}
-FULLY CUSTOM slide (use when the user wants a specific bespoke design). Canvas is 16:9 = 13.333in wide x 7.5in tall (4:3 = 10 x 7.5). Coordinates/sizes are inches:
-• {"custom":true,"background":{"color":"0A0A0B"},"elements":[
-     {"kind":"text","text":"...","x":0.6,"y":0.5,"w":12,"h":1,"fontSize":40,"bold":true,"color":"FFFFFF","align":"center"},
-     {"kind":"bullets","items":["..."],"x":0.7,"y":2,"w":6,"h":4,"fontSize":18,"color":"DDDDDD"},
-     {"kind":"image","prompt":"...","x":7.5,"y":2,"w":5,"h":3.5},
-     {"kind":"shape","shape":"rect|ellipse|line|roundRect|triangle","x":0,"y":0,"w":13.3,"h":0.3,"fill":"4A7A2E"},
-     {"kind":"table","rows":[["A","B"],["1","2"]],"x":1,"y":2,"w":8,"fontSize":14}
-   ],"notes":"..."}
-Keep every element inside the canvas; avoid overlaps unless intentional. Use images sparingly (each one adds generation time; max ~10 per deck).
+SLIDE TYPES (MIX them):
+• {"layout":"title","title":"...","subtitle":"...","kicker":"...","facilitator":"..."}
+• {"layout":"section","title":"Part title","number":"01"}
+• {"layout":"content","title":"...","bullets":["...","..."],"image":{"prompt":"...","side":"right"},"notes":"..."}
+• {"layout":"stat","title":"...","stats":[{"value":"82%","label":"..."},{"value":"3x","label":"..."}]}
+• {"layout":"two-column","title":"...","leftTitle":"...","left":["..."],"rightTitle":"...","right":["..."]}
+• {"layout":"quote","quote":"...","attribution":"..."}
+• {"layout":"table","title":"...","table":[["H1","H2"],["a","b"]]}
+• Fully custom: {"custom":true,"background":{"color":"0B1020"},"elements":[{"kind":"text|bullets|shape|image|table",...positions in inches on a 13.333x7.5 canvas...}],"notes":"..."}
 
-GRAPHIC JSON (single image):
-{"type":"image","prompt":"a rich, detailed image-generation prompt","width":1024,"height":1024,"caption":"short caption"}
-Use 1024x1024 unless a banner (1280x720) or portrait (768x1024) is clearly wanted.
+EXAMPLE (shape/quality to emulate — adapt fully to the real topic):
+{"type":"deck","title":"Climate-Smart Agriculture","kicker":"KIU · DRICE","theme":"emerald","facilitator":"Dr. M. A. Adewusi","slides":[
+ {"layout":"title","title":"Climate-Smart Agriculture","subtitle":"Building resilient farming systems in East Africa","kicker":"POLICY BRIEF"},
+ {"layout":"section","title":"The Challenge","number":"01"},
+ {"layout":"stat","title":"Why it matters","stats":[{"value":"60%","label":"of livelihoods depend on farming"},{"value":"+1.5°C","label":"regional warming by 2040"},{"value":"33%","label":"potential yield loss"}]},
+ {"layout":"content","title":"Key pressures","bullets":["Erratic rainfall and drought","Soil degradation","Limited access to inputs"],"image":{"prompt":"east african farmland under dramatic sky, aerial","side":"right"}},
+ {"layout":"two-column","title":"Approach","leftTitle":"Practices","left":["Drought-tolerant seed","Conservation tillage"],"rightTitle":"Enablers","right":["Extension services","Micro-finance"]},
+ {"layout":"quote","quote":"We do not inherit the land from our ancestors; we borrow it from our children.","attribution":"Proverb"},
+ {"layout":"content","title":"The way forward","bullets":["Scale proven practices","Invest in farmer training","Link data to decisions"],"notes":"Close with a call to action."}
+]}
 
-If source material (an uploaded deck/PDF/notes) is provided, base the design on it. Output JSON only.`;
+GRAPHIC JSON: {"type":"image","prompt":"rich detailed prompt","width":1024,"height":1024,"caption":"..."}
+
+If source material is provided, base the design on it. Output JSON only.`;
 
     const ses=ls.get("adl-ses")||{};
     let reply=null;
-    try{ reply=await chatRequest({messages:[{role:"user",content:userText+source}],systemPrompt:SYS,maxTokens:3800,model:HEAVY_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null}); }catch(e){ reply=null; }
+    /* Try Grace's upgraded model; fall back to the known-good model on any failure. */
+    try{ reply=await chatRequest({messages:[{role:"user",content:userText+source}],systemPrompt:SYS,maxTokens:4500,model:GRACE_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null}); }catch(e){ reply=null; }
+    if(!reply || /^⚠️/.test(reply) || reply.length<40){
+      try{ reply=await chatRequest({messages:[{role:"user",content:userText+source}],systemPrompt:SYS,maxTokens:4200,model:HEAVY_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null}); }catch(e){}
+    }
 
     let spec=null;
     try{ spec=parseDesignJSON(reply); }catch(e){ spec=null; }
