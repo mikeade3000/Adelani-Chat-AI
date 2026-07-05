@@ -449,20 +449,19 @@ async function buildDeck(spec){
   const W = size==="4:3"?10:13.333, H=7.5;
   pptx.defineLayout({name:"ADL",width:W,height:H}); pptx.layout="ADL";
 
-  /* ── design tokens ── */
   const lum = c=>{ const h=hex(c); return (parseInt(h.slice(0,2),16)*0.299+parseInt(h.slice(2,4),16)*0.587+parseInt(h.slice(4,6),16)*0.114); };
   const isDark = c=> lum(c) < 140;
-  const SHAPE={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect",rounded:"roundRect",triangle:"triangle",chevron:"chevron"};
+  const SH={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect",rounded:"roundRect",triangle:"triangle",chevron:"chevron"};
 
-  /* ── curated theme presets (Grace picks one, or supplies a custom object) ── */
+  /* ── themes: safe fonts, white/brand backgrounds (no cream), a card tint + dark cover ── */
   const PRESETS={
-    emerald:  {mode:"light",bg:"FFFFFF",titleBg:"F3EFE2",primary:"3D6B24",accent:"B8860B",text:"1A1208",muted:"6B6455",headFont:"Georgia",bodyFont:"Calibri"},
-    executive:{mode:"light",bg:"FFFFFF",titleBg:"0F2743",primary:"12314F",accent:"C9A227",text:"1B2733",muted:"5A6B7B",headFont:"Georgia",bodyFont:"Calibri"},
-    midnight: {mode:"dark", bg:"0B1020",titleBg:"0B1020",primary:"7CC0FF",accent:"FFB020",text:"EAF2FF",muted:"9FB3C8",headFont:"Trebuchet MS",bodyFont:"Calibri"},
-    coral:    {mode:"light",bg:"FFFDF9",titleBg:"E14B3B",primary:"E14B3B",accent:"1FA5A0",text:"2A2320",muted:"7A6E68",headFont:"Trebuchet MS",bodyFont:"Calibri"},
-    slate:    {mode:"light",bg:"FFFFFF",titleBg:"111827",primary:"1F2937",accent:"2563EB",text:"111827",muted:"6B7280",headFont:"Arial",bodyFont:"Arial"},
-    royal:    {mode:"dark", bg:"1A1130",titleBg:"1A1130",primary:"D9C36B",accent:"C084FC",text:"F3EEFF",muted:"B8A9D6",headFont:"Georgia",bodyFont:"Calibri"},
-    sunrise:  {mode:"light",bg:"FFFCF7",titleBg:"2B2D42",primary:"2B2D42",accent:"EF8354",text:"22223B",muted:"6E6A7B",headFont:"Verdana",bodyFont:"Calibri"}
+    emerald:  {mode:"light",bg:"FFFFFF",titleBg:"11261A",card:"F1F6F1",primary:"2C5F2D",accent:"C39A2B",text:"1A1A1A",muted:"5F6B60",headFont:"Cambria",bodyFont:"Calibri"},
+    executive:{mode:"light",bg:"FFFFFF",titleBg:"1E2761",card:"F1F4FB",primary:"1E2761",accent:"C9A227",text:"1B2230",muted:"5A6470",headFont:"Cambria",bodyFont:"Calibri"},
+    midnight: {mode:"dark", bg:"0B1020",titleBg:"0B1020",card:"161F38",primary:"9FC7FF",accent:"FFB020",text:"EAF2FF",muted:"9AAECB",headFont:"Calibri",bodyFont:"Calibri"},
+    coral:    {mode:"light",bg:"FFFFFF",titleBg:"2F3C7E",card:"FDF0F0",primary:"E14B54",accent:"2F3C7E",text:"27222A",muted:"6E6870",headFont:"Cambria",bodyFont:"Calibri"},
+    slate:    {mode:"light",bg:"FFFFFF",titleBg:"111827",card:"F3F5F8",primary:"1F2937",accent:"2563EB",text:"111827",muted:"6B7280",headFont:"Arial",bodyFont:"Arial"},
+    royal:    {mode:"dark", bg:"171033",titleBg:"171033",card:"241847",primary:"E6D492",accent:"B074F0",text:"F1ECFF",muted:"B3A6D2",headFont:"Cambria",bodyFont:"Calibri"},
+    teal:     {mode:"light",bg:"FFFFFF",titleBg:"02363B",card:"EAF5F3",primary:"04808C",accent:"02C39A",text:"14282A",muted:"5C6E6E",headFont:"Cambria",bodyFont:"Calibri"}
   };
   let th;
   if(typeof spec.theme==="string" && PRESETS[spec.theme.toLowerCase()]) th={...PRESETS[spec.theme.toLowerCase()]};
@@ -470,161 +469,219 @@ async function buildDeck(spec){
   else th={...PRESETS.emerald};
   function normalizeTheme(o){ const r={}; ["mode","headFont","bodyFont"].forEach(k=>{ if(o[k])r[k]=o[k]; });
     if(o.font){r.headFont=o.font;r.bodyFont=o.font;} if(o.titleFont)r.headFont=o.titleFont;
-    ["bg","titleBg","primary","accent","text","muted"].forEach(k=>{ if(o[k])r[k]=hex(o[k]); });
+    ["bg","titleBg","primary","accent","text","muted","card"].forEach(k=>{ if(o[k])r[k]=hex(o[k]); });
     return r; }
-  /* explicit font override always wins */
   if(spec.font){ th.headFont=spec.font; th.bodyFont=spec.font; }
   const HF=th.headFont, BF=th.bodyFont;
-  const hSize=num((spec.theme&&spec.theme.headingSize)||spec.headingSize,26);
-  const bSize=num((spec.theme&&spec.theme.bodySize)||spec.bodySize,17);
+  const hSize=num((spec.theme&&spec.theme.headingSize)||spec.headingSize,30);
+  const bSize=num((spec.theme&&spec.theme.bodySize)||spec.bodySize,15);
+  const darkTheme = th.mode==="dark";
 
-  /* ── pre-generate images (parallel, deduped, capped) ── */
+  /* ── pre-generate images ── */
   const prompts=[];
   if(spec.watermark) prompts.push(String(spec.watermark));
-  (spec.slides||[]).forEach(s=>{
-    if(s.background&&s.background.image) prompts.push(String(s.background.image));
+  (spec.slides||[]).forEach(s=>{ if(s.background&&s.background.image) prompts.push(String(s.background.image));
     if(s.image&&s.image.prompt) prompts.push(String(s.image.prompt));
-    (s.elements||[]).forEach(e=>{ if(e.kind==="image"&&e.prompt) prompts.push(String(e.prompt)); });
-  });
-  const uniq=[...new Set(prompts)].slice(0,12);
-  const IMG={};
+    (s.elements||[]).forEach(e=>{ if(e.kind==="image"&&e.prompt) prompts.push(String(e.prompt)); }); });
+  const uniq=[...new Set(prompts)].slice(0,12); const IMG={};
   await Promise.all(uniq.map(async p=>{ try{ IMG[p]=await fetchImageDataURL(pollImageURL(p,1280,720)); }catch(e){ IMG[p]=null; } }));
   const wm = spec.watermark?IMG[String(spec.watermark)]:null;
   const footerTxt = spec.footer!==undefined?spec.footer:"Adelani AI Chat · Grace";
 
+  /* ── reusable design pieces ── */
+  const SHADOW={type:"outer",color:darkTheme?"000000":"9AA6B2",opacity:darkTheme?0.45:0.28,blur:9,offset:3,angle:90};
+  const ICONS=["\u2728","\u25C6","\u25B6","\u2605","\u26A1","\u270E","\u2714","\u2699","\u267B","\u2691"];
+  const softText = darkTheme?"F4F6FB":th.text;
+  const softMuted= darkTheme?th.muted:th.muted;
+
+  const pill=(s,x,y,label,onDark)=>{ if(!label)return;
+    const w=Math.min(0.42+String(label).length*0.093,7);
+    s.addShape(pptx.ShapeType.roundRect,{x,y,w,h:0.4,fill:{color:th.accent,transparency:onDark?68:80},line:{type:"none"},rectRadius:0.2});
+    s.addText(String(label).toUpperCase(),{x,y,w,h:0.4,fontFace:BF,fontSize:11,bold:true,color:onDark?"FFFFFF":th.accent,align:"center",valign:"middle",charSpacing:2}); };
+
+  const iconChip=(s,x,y,sz,icon,idx)=>{
+    s.addShape(pptx.ShapeType.roundRect,{x,y,w:sz,h:sz,fill:{color:th.accent,transparency:darkTheme?58:80},line:{type:"none"},rectRadius:0.12,shadow:darkTheme?undefined:SHADOW});
+    s.addText(icon||ICONS[idx%ICONS.length],{x,y,w:sz,h:sz,fontFace:BF,fontSize:Math.round(sz*15),color:darkTheme?"FFFFFF":th.accent,align:"center",valign:"middle",bold:true});
+  };
+
+  const heading=(s,sd,onDark)=>{
+    let y=0.55;
+    if(sd.kicker||sd.tag){ pill(s,0.7,0.6,sd.kicker||sd.tag,onDark); y=1.12; }
+    s.addText(cleanTitle(sd.title),{x:0.68,y,w:W-1.4,h:0.9,fontFace:HF,fontSize:hSize,bold:true,color:onDark?"FFFFFF":th.primary,valign:"top",lineSpacingMultiple:0.98});
+    if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.7,y:y+0.82,w:W-1.4,h:0.5,fontFace:BF,fontSize:bSize,italic:true,color:onDark?"D8DEEA":th.muted});
+    return (sd.subtitle?y+1.35:y+0.95);
+  };
+  const footer=(s,n,onDark)=>{ if(footerTxt) s.addText(String(footerTxt),{x:0.7,y:H-0.45,w:7,h:0.3,fontFace:BF,fontSize:9,color:onDark?"8FA0B5":th.muted});
+    if(n) s.addText(String(n),{x:W-1.1,y:H-0.45,w:0.6,h:0.3,fontFace:BF,fontSize:9,color:onDark?"8FA0B5":th.muted,align:"right"}); };
+  const addWM=s=>{ if(wm) s.addImage({data:wm,x:W/2-4,y:H/2-2.4,w:8,h:4.8,transparency:90}); };
+
   const bulletList=(items,fs,color)=>(items||[]).map(b=>{
-    const t = (b&&typeof b==="object") ? String(b.text||"") : String(b);
-    const sub = (b&&typeof b==="object" && b.sub)?"\n"+String(b.sub):"";
-    return {text:t+sub,options:{bullet:{code:"2022"},fontSize:fs,color:hex(color),fontFace:BF,paraSpaceAfter:9,paraSpaceBefore:2,lineSpacingMultiple:1.05}};
+    const t=(b&&typeof b==="object")?String(b.text||b.title||""):String(b);
+    return {text:t,options:{bullet:{code:"25CF",indent:16},fontSize:fs,color:hex(color),fontFace:BF,paraSpaceAfter:12,paraSpaceBefore:2,lineSpacingMultiple:1.08}};
   });
 
-  /* ── decorative helpers ── */
-  const addWM=s=>{ if(wm) s.addImage({data:wm,x:W/2-4,y:H/2-2.4,w:8,h:4.8,transparency:90}); };
-  const pageNo=(s,n)=>{ s.addText(String(n),{x:W-1.0,y:H-0.5,w:0.6,h:0.3,fontFace:BF,fontSize:9,color:th.muted,align:"right"}); };
-  const footRule=(s)=>{ s.addShape(pptx.ShapeType.rect,{x:0.6,y:H-0.55,w:W-1.2,h:0.012,fill:{color:th.muted,transparency:55}});
-    if(footerTxt) s.addText(String(footerTxt),{x:0.6,y:H-0.5,w:6,h:0.3,fontFace:BF,fontSize:9,color:th.muted,align:"left"}); };
-
   const slides = Array.isArray(spec.slides)&&spec.slides.length?spec.slides:[{layout:"title",title:spec.title||"Presentation"}];
-  let pageCount=0;
+  let page=0;
 
   slides.forEach((sd,idx)=>{
     const s=pptx.addSlide();
-    const layout = sd.custom||sd.elements&&!sd.layout ? "custom" : (sd.layout||(idx===0?"title":"content"));
+    let layout = sd.custom||(sd.elements&&!sd.layout)?"custom":(sd.layout||(idx===0?"title":"content"));
+    if(layout==="content" && Array.isArray(sd.items) && sd.items.length) layout="features";
 
-    /* background resolution */
-    let slideBg;
-    if(sd.background&&sd.background.color) slideBg=hex(sd.background.color);
-    else if(layout==="title"||layout==="section") slideBg=th.titleBg;
-    else slideBg=th.bg;
+    /* background */
+    let bg;
+    if(sd.background&&sd.background.color) bg=hex(sd.background.color);
+    else if(layout==="title"||layout==="section") bg=th.titleBg;
+    else bg=th.bg;
     if(sd.background&&sd.background.image&&IMG[String(sd.background.image)]) s.background={data:IMG[String(sd.background.image)]};
-    else s.background={color:slideBg};
-    const darkBg=isDark(slideBg);
-    const bodyColor = darkBg?"F3F4F6":th.text;
-    const titleColor= darkBg?(th.accent):th.primary;
+    else s.background={color:bg};
+    const onDark=isDark(bg);
+    const bodyC = onDark?"E8EDF5":th.text;
+    const mutedC= onDark?"AEBCCF":th.muted;
 
     /* ═══ CUSTOM ═══ */
-    if(layout==="custom"){
-      addWM(s); renderElements(s,sd.elements,{W,H,BF,bodyColor,IMG}); if(sd.footer!==false){footRule(s);} 
-    }
+    if(layout==="custom"){ addWM(s); renderElements(s,sd.elements,{W,H,BF,bodyColor:bodyC,IMG,P,SHADOW}); }
+
     /* ═══ COVER ═══ */
     else if(layout==="title"){
-      const t = darkBg?"FFFFFF":th.primary;
-      const sub = darkBg?"D8E0EA":th.muted;
-      // decorative geometry
-      s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:0.45,h:H,fill:{color:th.accent}});
-      s.addShape(pptx.ShapeType.ellipse,{x:W-3.6,y:H-3.4,w:5,h:5,fill:{color:th.accent,transparency:86}});
-      s.addShape(pptx.ShapeType.ellipse,{x:W-2.2,y:-1.6,w:3.4,h:3.4,fill:{color:th.primary,transparency:darkBg?80:90}});
+      s.addShape(pptx.ShapeType.ellipse,{x:W-4.2,y:-2.2,w:6.4,h:6.4,fill:{color:th.accent,transparency:82},line:{type:"none"}});
+      s.addShape(pptx.ShapeType.ellipse,{x:-1.8,y:H-2.6,w:4.6,h:4.6,fill:{color:th.primary,transparency:onDark?78:88},line:{type:"none"}});
       addWM(s);
-      if(spec.kicker||sd.kicker) s.addText(String(spec.kicker||sd.kicker).toUpperCase(),{x:0.95,y:1.7,w:W-2,h:0.5,fontFace:BF,fontSize:13,bold:true,color:th.accent,charSpacing:3});
-      s.addText(cleanTitle(sd.title)||String(spec.title||""),{x:0.9,y:2.35,w:W-2.4,h:1.9,fontFace:HF,fontSize:num(sd.titleSize,46),bold:true,color:t,align:"left",lineSpacingMultiple:0.98});
-      s.addShape(pptx.ShapeType.rect,{x:0.97,y:4.35,w:2.4,h:0.07,fill:{color:th.accent}});
-      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.95,y:4.6,w:W-2.6,h:0.9,fontFace:BF,fontSize:bSize+5,color:sub,align:"left"});
+      pill(s,0.9,1.65,spec.kicker||sd.kicker||"PRESENTATION",true);
+      s.addText(cleanTitle(sd.title)||String(spec.title||""),{x:0.85,y:2.35,w:W-3,h:2.0,fontFace:HF,fontSize:num(sd.titleSize,48),bold:true,color:"FFFFFF",valign:"top",lineSpacingMultiple:0.98});
+      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.9,y:4.55,w:W-3.2,h:0.9,fontFace:BF,fontSize:bSize+6,color:"CFD8E6"});
       const fac=sd.facilitator||spec.facilitator;
-      if(fac) s.addText("Facilitator: "+fac,{x:0.95,y:5.7,w:W-2.6,h:0.5,fontFace:BF,fontSize:bSize+1,italic:true,color:sub});
-      if(footerTxt) s.addText(String(footerTxt),{x:0.95,y:H-0.62,w:W-2,h:0.35,fontFace:BF,fontSize:11,color:th.accent});
+      if(fac) s.addText("Facilitator: "+fac,{x:0.9,y:5.6,w:W-3,h:0.5,fontFace:BF,fontSize:bSize+2,italic:true,color:"AEBCCF"});
+      if(footerTxt) s.addText(String(footerTxt),{x:0.9,y:H-0.6,w:W-2,h:0.35,fontFace:BF,fontSize:11,color:th.accent});
     }
-    /* ═══ SECTION DIVIDER ═══ */
+
+    /* ═══ SECTION ═══ */
     else if(layout==="section"){
-      addWM(s);
-      pageCount++;
-      s.addText(String(sd.number||("0"+pageCount)).slice(0,2),{x:0.7,y:0.6,w:6,h:3,fontFace:HF,fontSize:200,bold:true,color:"FFFFFF",transparency:86,align:"left"});
-      s.addShape(pptx.ShapeType.rect,{x:0.95,y:4.6,w:2.4,h:0.08,fill:{color:th.accent}});
-      s.addText(cleanTitle(sd.title),{x:0.9,y:4.85,w:W-2,h:1.4,fontFace:HF,fontSize:36,bold:true,color:"FFFFFF"});
-      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.95,y:6.1,w:W-2,h:0.6,fontFace:BF,fontSize:bSize+2,color:"E8EEF5"});
+      addWM(s); page++;
+      s.addShape(pptx.ShapeType.ellipse,{x:W-4,y:H-3.4,w:5.5,h:5.5,fill:{color:th.accent,transparency:84},line:{type:"none"}});
+      s.addText(String(sd.number||("0"+page)).slice(0,2),{x:0.85,y:0.7,w:5,h:3,fontFace:HF,fontSize:150,bold:true,color:th.accent,transparency:onDark?60:70});
+      pill(s,0.95,4.5,sd.kicker||"SECTION",true);
+      s.addText(cleanTitle(sd.title),{x:0.9,y:5.0,w:W-2,h:1.4,fontFace:HF,fontSize:38,bold:true,color:"FFFFFF"});
+      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.95,y:6.25,w:W-2,h:0.6,fontFace:BF,fontSize:bSize+2,color:"CFD8E6"});
     }
-    /* ═══ QUOTE ═══ */
-    else if(layout==="quote"){
-      addWM(s); pageCount++;
-      s.addText("\u201C",{x:0.5,y:0.4,w:3,h:3,fontFace:"Georgia",fontSize:160,bold:true,color:th.accent,transparency:35});
-      s.addText(String(sd.quote||sd.text||""),{x:1.4,y:2.1,w:W-2.8,h:3,fontFace:HF,fontSize:Math.max(hSize+2,28),italic:true,color:darkBg?"FFFFFF":th.primary,align:"left",valign:"middle",lineSpacingMultiple:1.1});
-      if(sd.attribution){ s.addShape(pptx.ShapeType.rect,{x:1.45,y:5.5,w:0.5,h:0.05,fill:{color:th.accent}});
-        s.addText(String(sd.attribution),{x:2.1,y:5.28,w:W-3,h:0.5,fontFace:BF,fontSize:bSize,color:bodyColor}); }
-      footRule(s); pageNo(s,pageCount);
-    }
-    /* ═══ STAT / IMPACT ═══ */
-    else if(layout==="stat"||sd.stats){
-      pageCount++;
-      contentHeader(s,sd);
-      const stats=(sd.stats||[]).slice(0,4);
-      const n=stats.length||1; const gap=0.4; const cw=(W-1.4-(n-1)*gap)/n;
-      stats.forEach((st,i)=>{
-        const x=0.7+i*(cw+gap);
-        s.addShape(pptx.ShapeType.roundRect,{x,y:2.2,w:cw,h:3.2,fill:{color:darkBg?"FFFFFF":th.primary,transparency:darkBg?92:94},line:{color:th.accent,width:1},rectRadius:0.08});
-        s.addText(String(st.value||""),{x,y:2.6,w:cw,h:1.4,fontFace:HF,fontSize:46,bold:true,color:th.accent,align:"center"});
-        s.addText(String(st.label||""),{x:x+0.15,y:4.0,w:cw-0.3,h:1.2,fontFace:BF,fontSize:bSize-1,color:bodyColor,align:"center",valign:"top"});
+
+    /* ═══ FEATURES (icon rows) — the hero layout ═══ */
+    else if(layout==="features"){
+      const top=heading(s,sd,onDark); addWM(s); page++;
+      const items=(sd.items||[]).slice(0,5);
+      const n=items.length||1;
+      const areaTop=Math.max(top,1.9), areaH=H-areaTop-0.7;
+      const rowH=Math.min(areaH/n, 1.3), gap=(areaH-rowH*n)/Math.max(n-1,1);
+      items.forEach((it,i)=>{
+        const y=areaTop+i*(rowH+gap);
+        const sz=Math.min(rowH-0.15,0.95);
+        iconChip(s,0.7,y+(rowH-sz)/2,sz,it.icon,i);
+        const tx=0.7+sz+0.35;
+        s.addText(String(it.title||it.header||""),{x:tx,y:y+0.02,w:W-tx-0.7,h:0.45,fontFace:HF,fontSize:bSize+4,bold:true,color:onDark?"FFFFFF":th.primary,valign:"middle"});
+        if(it.text||it.desc) s.addText(String(it.text||it.desc),{x:tx,y:y+0.5,w:W-tx-0.7,h:rowH-0.5,fontFace:BF,fontSize:bSize-1,color:mutedC,valign:"top",lineSpacingMultiple:1.05});
       });
-      footRule(s); pageNo(s,pageCount);
+      footer(s,page,onDark);
     }
+
+    /* ═══ GRID / CARDS ═══ */
+    else if(layout==="grid"||layout==="cards"){
+      const top=heading(s,sd,onDark); addWM(s); page++;
+      const items=(sd.items||sd.cards||[]).slice(0,6);
+      const n=items.length||1;
+      const cols = n<=2?n : (n<=4?2:3);
+      const rows = Math.ceil(n/cols);
+      const areaTop=Math.max(top,1.9), areaH=H-areaTop-0.7;
+      const gx=0.35, gy=0.35;
+      const cw=(W-1.4-(cols-1)*gx)/cols, ch=(areaH-(rows-1)*gy)/rows;
+      items.forEach((it,i)=>{
+        const r=Math.floor(i/cols), c=i%cols;
+        const x=0.7+c*(cw+gx), y=areaTop+r*(ch+gy);
+        s.addShape(pptx.ShapeType.roundRect,{x,y,w:cw,h:ch,fill:{color:onDark?th.card:th.card},line:{type:"none"},rectRadius:0.08,shadow:SHADOW});
+        const sz=0.7; iconChip(s,x+0.28,y+0.28,sz,it.icon,i);
+        s.addText(String(it.title||it.header||""),{x:x+0.28,y:y+0.28+sz+0.12,w:cw-0.56,h:0.5,fontFace:HF,fontSize:bSize+3,bold:true,color:onDark?"FFFFFF":th.primary});
+        if(it.text||it.desc) s.addText(String(it.text||it.desc),{x:x+0.28,y:y+0.28+sz+0.66,w:cw-0.56,h:ch-sz-1.1,fontFace:BF,fontSize:bSize-2,color:mutedC,valign:"top",lineSpacingMultiple:1.04});
+      });
+      footer(s,page,onDark);
+    }
+
+    /* ═══ STEPS (numbered) ═══ */
+    else if(layout==="steps"){
+      const top=heading(s,sd,onDark); addWM(s); page++;
+      const items=(sd.items||sd.steps||[]).slice(0,5); const n=items.length||1;
+      const areaTop=Math.max(top,1.9), areaH=H-areaTop-0.7;
+      const rowH=areaH/n;
+      items.forEach((it,i)=>{
+        const y=areaTop+i*rowH; const d=0.62;
+        s.addShape(pptx.ShapeType.ellipse,{x:0.7,y:y+(rowH-d)/2,w:d,h:d,fill:{color:th.accent,transparency:darkTheme?40:0},line:{type:"none"}});
+        s.addText(String(i+1),{x:0.7,y:y+(rowH-d)/2,w:d,h:d,fontFace:HF,fontSize:18,bold:true,color:"FFFFFF",align:"center",valign:"middle"});
+        const tx=0.7+d+0.35;
+        s.addText(String(it.title||it.header||""),{x:tx,y:y+0.05,w:W-tx-0.7,h:0.45,fontFace:HF,fontSize:bSize+3,bold:true,color:onDark?"FFFFFF":th.primary,valign:"middle"});
+        if(it.text||it.desc) s.addText(String(it.text||it.desc),{x:tx,y:y+0.52,w:W-tx-0.7,h:rowH-0.55,fontFace:BF,fontSize:bSize-1,color:mutedC,valign:"top"});
+      });
+      footer(s,page,onDark);
+    }
+
+    /* ═══ STAT ═══ */
+    else if(layout==="stat"||sd.stats){
+      const top=heading(s,sd,onDark); addWM(s); page++;
+      const stats=(sd.stats||[]).slice(0,4); const n=stats.length||1;
+      const gap=0.4, cw=(W-1.4-(n-1)*gap)/n; const cy=Math.max(top,2.2), chh=Math.min(3.2,H-cy-0.8);
+      stats.forEach((st,i)=>{ const x=0.7+i*(cw+gap);
+        s.addShape(pptx.ShapeType.roundRect,{x,y:cy,w:cw,h:chh,fill:{color:th.card},line:{type:"none"},rectRadius:0.08,shadow:SHADOW});
+        s.addText(String(st.value||""),{x,y:cy+0.35,w:cw,h:1.3,fontFace:HF,fontSize:48,bold:true,color:th.accent,align:"center"});
+        s.addText(String(st.label||""),{x:x+0.2,y:cy+1.7,w:cw-0.4,h:chh-1.8,fontFace:BF,fontSize:bSize-1,color:mutedC,align:"center",valign:"top"});
+      });
+      footer(s,page,onDark);
+    }
+
     /* ═══ TWO-COLUMN ═══ */
     else if(layout==="two-column"||sd.left||sd.right){
-      pageCount++; contentHeader(s,sd);
-      const colW=(W-1.8)/2;
-      if(sd.leftTitle) s.addText(String(sd.leftTitle),{x:0.7,y:1.85,w:colW,h:0.5,fontFace:HF,fontSize:bSize+4,bold:true,color:th.accent});
-      s.addText(bulletList(sd.left,bSize,bodyColor),{x:0.7,y:sd.leftTitle?2.45:1.9,w:colW,h:H-3,valign:"top"});
-      s.addShape(pptx.ShapeType.rect,{x:0.7+colW+0.3,y:1.9,w:0.015,h:H-3.2,fill:{color:th.muted,transparency:50}});
-      if(sd.rightTitle) s.addText(String(sd.rightTitle),{x:1.1+colW,y:1.85,w:colW,h:0.5,fontFace:HF,fontSize:bSize+4,bold:true,color:th.accent});
-      s.addText(bulletList(sd.right,bSize,bodyColor),{x:1.1+colW,y:sd.rightTitle?2.45:1.9,w:colW,h:H-3,valign:"top"});
-      footRule(s); pageNo(s,pageCount);
+      const top=heading(s,sd,onDark); addWM(s); page++;
+      const colW=(W-1.75)/2, cy=Math.max(top,1.9);
+      if(sd.leftTitle) s.addText(String(sd.leftTitle),{x:0.7,y:cy,w:colW,h:0.5,fontFace:HF,fontSize:bSize+3,bold:true,color:th.accent});
+      s.addText(bulletList(sd.left,bSize,bodyC),{x:0.7,y:sd.leftTitle?cy+0.55:cy,w:colW,h:H-cy-1,valign:"top"});
+      if(sd.rightTitle) s.addText(String(sd.rightTitle),{x:0.85+colW+0.2,y:cy,w:colW,h:0.5,fontFace:HF,fontSize:bSize+3,bold:true,color:th.accent});
+      s.addText(bulletList(sd.right,bSize,bodyC),{x:0.85+colW+0.2,y:sd.rightTitle?cy+0.55:cy,w:colW,h:H-cy-1,valign:"top"});
+      footer(s,page,onDark);
     }
+
+    /* ═══ QUOTE ═══ */
+    else if(layout==="quote"){
+      addWM(s); page++;
+      s.addText("\u201C",{x:0.6,y:0.5,w:3,h:3,fontFace:"Georgia",fontSize:180,bold:true,color:th.accent,transparency:onDark?55:60});
+      s.addText(String(sd.quote||sd.text||""),{x:1.5,y:2.2,w:W-3,h:3,fontFace:HF,fontSize:Math.max(hSize,30),italic:true,color:onDark?"FFFFFF":th.primary,valign:"middle",lineSpacingMultiple:1.12});
+      if(sd.attribution) s.addText("— "+sd.attribution,{x:1.55,y:5.4,w:W-3,h:0.5,fontFace:BF,fontSize:bSize+1,bold:true,color:th.accent});
+      footer(s,page,onDark);
+    }
+
     /* ═══ TABLE ═══ */
     else if(layout==="table"||sd.table){
-      pageCount++; contentHeader(s,sd);
-      const rows=(sd.table||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:BF,fontSize:bSize-2,
-        color:ri===0?"FFFFFF":th.text,bold:ri===0,fill:{color:ri===0?th.primary:(ri%2?"F4F1EA":"FFFFFF")},align:"left",valign:"middle",margin:5}})));
-      if(rows.length) s.addTable(rows,{x:0.7,y:1.95,w:W-1.4,border:{type:"solid",color:"E4E0D6",pt:0.5},rowH:0.45});
-      footRule(s); pageNo(s,pageCount);
+      const top=heading(s,sd,onDark); addWM(s); page++;
+      const rows=(sd.table||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:BF,fontSize:bSize-1,
+        color:ri===0?"FFFFFF":th.text,bold:ri===0,fill:{color:ri===0?th.primary:(ri%2?th.card:"FFFFFF")},align:"left",valign:"middle",margin:6}})));
+      if(rows.length) s.addTable(rows,{x:0.7,y:Math.max(top,1.9),w:W-1.4,border:{type:"none"},rowH:0.5});
+      footer(s,page,onDark);
     }
-    /* ═══ CONTENT (default) ═══ */
+
+    /* ═══ CONTENT (clean list, no bars) ═══ */
     else {
-      pageCount++; contentHeader(s,sd);
-      const img = sd.image&&sd.image.prompt?IMG[String(sd.image.prompt)]:null;
-      const side = sd.image&&sd.image.side==="left"?"left":"right";
-      if(img){
-        const iw=(W-1.4)*0.44, ih=H-2.7;
-        const ix = side==="right"? W-0.7-iw : 0.7;
-        s.addShape(pptx.ShapeType.roundRect,{x:ix-0.06,y:1.9-0.06,w:iw+0.12,h:ih+0.12,fill:{color:th.accent,transparency:80},rectRadius:0.06});
-        s.addImage({data:img,x:ix,y:1.9,w:iw,h:ih,rounding:true});
-        const tx = side==="right"?0.7:0.7+iw+0.5;
-        const tw = W-1.4-iw-0.5;
-        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize,bodyColor),{x:tx,y:1.95,w:tw,h:ih,valign:"top"});
-        else if(sd.body) s.addText(String(sd.body),{x:tx,y:1.95,w:tw,h:ih,fontFace:BF,fontSize:bSize,color:bodyColor,valign:"top",lineSpacingMultiple:1.15});
+      const top=heading(s,sd,onDark); addWM(s); page++;
+      const img=sd.image&&sd.image.prompt?IMG[String(sd.image.prompt)]:null;
+      const side=sd.image&&sd.image.side==="left"?"left":"right";
+      const cy=Math.max(top,1.9);
+      if(img){ const iw=(W-1.4)*0.44, ih=H-cy-1.0; const ix=side==="right"?W-0.7-iw:0.7;
+        s.addImage({data:img,x:ix,y:cy,w:iw,h:ih,rounding:true,shadow:SHADOW});
+        const tx=side==="right"?0.7:0.7+iw+0.5, tw=W-1.4-iw-0.5;
+        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize,bodyC),{x:tx,y:cy,w:tw,h:ih,valign:"top"});
+        else if(sd.body) s.addText(String(sd.body),{x:tx,y:cy,w:tw,h:ih,fontFace:BF,fontSize:bSize,color:bodyC,valign:"top",lineSpacingMultiple:1.2});
       } else {
-        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize,bodyColor),{x:0.75,y:1.9,w:W-1.5,h:H-2.9,valign:"top"});
-        else if(sd.body) s.addText(String(sd.body),{x:0.75,y:1.9,w:W-1.5,h:H-2.9,fontFace:BF,fontSize:bSize,color:bodyColor,valign:"top",lineSpacingMultiple:1.2});
+        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize+1,bodyC),{x:0.75,y:cy,w:W-1.5,h:H-cy-0.9,valign:"top"});
+        else if(sd.body) s.addText(String(sd.body),{x:0.75,y:cy,w:W-1.5,h:H-cy-0.9,fontFace:BF,fontSize:bSize+1,color:bodyC,valign:"top",lineSpacingMultiple:1.25});
       }
-      if(sd.elements) renderElements(s,sd.elements,{W,H,BF,bodyColor,IMG});
-      footRule(s); pageNo(s,pageCount);
+      if(sd.elements) renderElements(s,sd.elements,{W,H,BF,bodyColor:bodyC,IMG,P,SHADOW});
+      footer(s,page,onDark);
     }
     if(sd.notes) s.addNotes(String(sd.notes));
-
-    /* shared content header (title + accent underline + number badge) */
-    function contentHeader(s,sd){
-      addWM(s);
-      s.addShape(pptx.ShapeType.rect,{x:0.6,y:0.55,w:0.09,h:0.62,fill:{color:th.accent}});
-      s.addText(cleanTitle(sd.title),{x:0.85,y:0.5,w:W-1.7,h:0.75,fontFace:HF,fontSize:hSize,bold:true,color:titleColor,valign:"middle"});
-      s.addShape(pptx.ShapeType.rect,{x:0.86,y:1.32,w:1.5,h:0.045,fill:{color:th.accent}});
-      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.86,y:1.4,w:W-1.7,h:0.4,fontFace:BF,fontSize:bSize-2,italic:true,color:th.muted});
-    }
   });
 
   const blob=await pptx.write("blob");
@@ -632,10 +689,9 @@ async function buildDeck(spec){
   return {url:URL.createObjectURL(blob),filename,count:slides.length};
 }
 
-/* Render an array of freeform elements onto a slide (used by custom slides). */
+/* Render freeform elements (custom slides). */
 function renderElements(s,els,ctx){
-  const {W,H,BF,bodyColor,IMG}=ctx;
-  const P=window.PptxGenJS;
+  const {W,H,BF,bodyColor,IMG,P,SHADOW}=ctx;
   const SH={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect",rounded:"roundRect",triangle:"triangle",chevron:"chevron"};
   (els||[]).forEach(el=>{
     const font=el.fontFace||BF;
@@ -646,23 +702,24 @@ function renderElements(s,els,ctx){
           align:el.align||"left",valign:el.valign||"top",charSpacing:el.charSpacing?num(el.charSpacing,0):undefined,
           fill:el.fill?{color:hex(el.fill)}:undefined,lineSpacingMultiple:num(el.lineSpacing,1.05)});
       } else if(el.kind==="bullets"){
-        const items=(el.items||[]).map(b=>({text:String(b),options:{bullet:el.numbered?{type:"number"}:{code:"2022"},
-          fontSize:num(el.fontSize,17),color:hex(el.color||bodyColor),fontFace:font,paraSpaceAfter:9}}));
+        const items=(el.items||[]).map(b=>({text:String(b),options:{bullet:el.numbered?{type:"number"}:{code:"25CF",indent:16},
+          fontSize:num(el.fontSize,15),color:hex(el.color||bodyColor),fontFace:font,paraSpaceAfter:10}}));
         if(items.length) s.addText(items,{x:num(el.x,0.7),y:num(el.y,1.5),w:num(el.w,W-1.4),h:num(el.h,H-2.4),valign:el.valign||"top"});
       } else if(el.kind==="shape"){
         const st=SH[String(el.shape||"rect").toLowerCase()]||"rect";
         s.addShape(P.ShapeType[st]||P.ShapeType.rect,{x:num(el.x,0),y:num(el.y,0),w:num(el.w,1),h:num(el.h,0.3),
           fill:el.fill?{color:hex(el.fill),transparency:num(el.transparency,0)}:undefined,
-          line:el.lineColor?{color:hex(el.lineColor),width:num(el.lineWidth,1)}:undefined,rectRadius:el.radius?num(el.radius,0.1):undefined});
+          line:el.lineColor?{color:hex(el.lineColor),width:num(el.lineWidth,1)}:{type:"none"},
+          rectRadius:el.radius?num(el.radius,0.1):undefined,shadow:el.shadow?SHADOW:undefined});
       } else if(el.kind==="image"){
         const data=el.prompt?(IMG&&IMG[String(el.prompt)]):(el.dataUrl||null);
-        if(data) s.addImage({data,x:num(el.x,1),y:num(el.y,1),w:num(el.w,4),h:num(el.h,3),transparency:num(el.transparency,0),rounding:!!el.rounding});
+        if(data) s.addImage({data,x:num(el.x,1),y:num(el.y,1),w:num(el.w,4),h:num(el.h,3),transparency:num(el.transparency,0),rounding:!!el.rounding,shadow:el.shadow?SHADOW:undefined});
       } else if(el.kind==="table"){
         const rows=(el.rows||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:font,fontSize:num(el.fontSize,14),
-          color:ri===0?"FFFFFF":hex(el.color||bodyColor),bold:ri===0,fill:{color:ri===0?"3D6B24":(ri%2?"F4F1EA":"FFFFFF")}}})));
-        if(rows.length) s.addTable(rows,{x:num(el.x,0.7),y:num(el.y,1.6),w:num(el.w,W-1.4),border:{type:"solid",color:"DDDDDD",pt:0.5}});
+          color:ri===0?"FFFFFF":hex(el.color||bodyColor),bold:ri===0,fill:{color:ri===0?"2C5F2D":(ri%2?"F1F6F1":"FFFFFF")}}})));
+        if(rows.length) s.addTable(rows,{x:num(el.x,0.7),y:num(el.y,1.6),w:num(el.w,W-1.4),border:{type:"none"}});
       }
-    }catch(e){/* skip bad element */}
+    }catch(e){}
   });
 }
 
@@ -1204,44 +1261,56 @@ CONTEXT — use these facts, never invent other meanings:
 • Adelani AI Chat (mikeade3000.github.io/Adelani-Chat-AI) is a multi-agent AI assistant by Dr. Michael Adelani Adewusi.
 • Its 7 agents: Asha, Scholar, Bizna, Dawa, Ubuntu, Nexus, and Grace (design). "Grace" ALWAYS means this design agent — NEVER a religious concept.
 
-DESIGN PRINCIPLES — aim for STUNNING, not generic:
-• Craft a real narrative arc: an engaging cover, then a logical flow, ending with a strong close/call-to-action.
-• Write SHARP content: concrete, specific, insightful — never filler. Bullets are tight phrases (aim ≤10 words), not paragraphs. 3-5 bullets per slide max.
-• Create VISUAL VARIETY: alternate layouts — use section dividers between parts, a "stat" slide for key numbers, "quote" for emphasis, "two-column" for comparisons, content slides with a relevant side image. Never make every slide the same.
-• Choose a theme that fits the mood (see PRESETS). Add relevant imagery on 2-4 slides for impact (each image adds time; ≤8 per deck).
+DESIGN PRINCIPLES — aim for STUNNING, studio-quality decks:
+• Craft a narrative arc: bold cover → logical flow → strong close.
+• Write SHARP content: concrete and specific, never filler. Titles ≤6 words. Card text ≤14 words.
+• PREFER icon-card layouts over plain bullets. Most "points" slides should be "features", "grid", or "steps" with an icon, a bold title, and a one-line description per item. Give each item a fitting emoji "icon" (e.g. 🚀 🎯 💡 🔒 📊 🌍 ⚡ ✅). This card-and-icon motif is what makes decks look professional.
+• Create VARIETY: alternate layouts — section dividers between parts, a "stat" slide for key numbers, "quote" for emphasis, "two-column" for comparisons, occasional images. Never repeat one layout the whole deck.
+• Do NOT describe bars, stripes, or underlines — the renderer handles all styling. Just give structured content and a theme.
 
-OBEY EVERY EXPLICIT INSTRUCTION EXACTLY: slide count (output EXACTLY N slide objects), fonts, sizes, colours, section order, facilitator name, watermark, layout. Never prefix titles with "Slide 1:".
+OBEY EXPLICIT INSTRUCTIONS EXACTLY: slide count (EXACTLY N slide objects), fonts, sizes, colours, section order, facilitator, watermark. Never prefix titles with "Slide 1:".
 
 DECK JSON:
 {
- "type":"deck","title":"...","kicker":"OPTIONAL small label above cover title",
+ "type":"deck","title":"...","kicker":"OPTIONAL small tag on cover",
  "filename":"optional","facilitator":"optional","size":"16:9",
- "footer":"optional (\"\" hides it)","watermark":"optional faint image prompt",
- "theme":"emerald",              // preset NAME (below) OR a custom object
+ "footer":"optional (\"\" hides)","watermark":"optional faint image prompt",
+ "theme":"emerald",   // preset NAME or custom object
  "slides":[ ...EXACTLY the requested count... ]
 }
-THEME PRESETS (pick the best fit): "emerald" (Adelani green/gold, academic), "executive" (navy + gold, corporate), "midnight" (dark, bold tech), "coral" (warm, energetic), "slate" (minimal, modern blue accent), "royal" (deep purple + gold, elegant), "sunrise" (clean, orange accent).
-Custom theme object: {"primary":"HEX","accent":"HEX","bg":"HEX","titleBg":"HEX","text":"HEX","font":"Calibri","headingSize":26,"bodySize":17,"mode":"light|dark"}. Colours are 6-hex WITHOUT '#'. If the user names a font/size/colour, honour it here.
+THEME PRESETS: "emerald" (green/gold academic), "executive" (navy/gold corporate), "midnight" (dark bold tech), "coral" (coral/navy energetic), "slate" (minimal blue accent), "royal" (dark purple/gold elegant), "teal" (teal/mint fresh). Custom: {"primary":"HEX","accent":"HEX","bg":"HEX","titleBg":"HEX","text":"HEX","font":"Calibri","headingSize":30,"bodySize":15,"mode":"light|dark"}. Hex has NO '#'. Honour any font/colour the user names.
 
-SLIDE TYPES (MIX them):
+SLIDE TYPES — MIX them (prefer the first three for points):
+• {"layout":"features","title":"...","kicker":"optional","items":[{"icon":"🚀","title":"Fast setup","text":"Deploy in minutes"},{"icon":"🔒","title":"Secure","text":"End-to-end encryption"}]}   // icon rows — the default for points
+• {"layout":"grid","title":"...","items":[{"icon":"🎯","title":"...","text":"..."}, ...4-6 cards]}   // icon cards in a grid
+• {"layout":"steps","title":"...","items":[{"title":"Step name","text":"detail"}, ...]}   // numbered process
 • {"layout":"title","title":"...","subtitle":"...","kicker":"...","facilitator":"..."}
 • {"layout":"section","title":"Part title","number":"01"}
-• {"layout":"content","title":"...","bullets":["...","..."],"image":{"prompt":"...","side":"right"},"notes":"..."}
 • {"layout":"stat","title":"...","stats":[{"value":"82%","label":"..."},{"value":"3x","label":"..."}]}
 • {"layout":"two-column","title":"...","leftTitle":"...","left":["..."],"rightTitle":"...","right":["..."]}
 • {"layout":"quote","quote":"...","attribution":"..."}
 • {"layout":"table","title":"...","table":[["H1","H2"],["a","b"]]}
-• Fully custom: {"custom":true,"background":{"color":"0B1020"},"elements":[{"kind":"text|bullets|shape|image|table",...positions in inches on a 13.333x7.5 canvas...}],"notes":"..."}
+• {"layout":"content","title":"...","bullets":["..."],"image":{"prompt":"...","side":"right"}}   // use sparingly; prefer features
+• Fully custom: {"custom":true,"background":{"color":"0B1020"},"elements":[{"kind":"text|bullets|shape|image|table",...inches on 13.333x7.5...,"shadow":true}]}
 
-EXAMPLE (shape/quality to emulate — adapt fully to the real topic):
-{"type":"deck","title":"Climate-Smart Agriculture","kicker":"KIU · DRICE","theme":"emerald","facilitator":"Dr. M. A. Adewusi","slides":[
- {"layout":"title","title":"Climate-Smart Agriculture","subtitle":"Building resilient farming systems in East Africa","kicker":"POLICY BRIEF"},
- {"layout":"section","title":"The Challenge","number":"01"},
- {"layout":"stat","title":"Why it matters","stats":[{"value":"60%","label":"of livelihoods depend on farming"},{"value":"+1.5°C","label":"regional warming by 2040"},{"value":"33%","label":"potential yield loss"}]},
- {"layout":"content","title":"Key pressures","bullets":["Erratic rainfall and drought","Soil degradation","Limited access to inputs"],"image":{"prompt":"east african farmland under dramatic sky, aerial","side":"right"}},
- {"layout":"two-column","title":"Approach","leftTitle":"Practices","left":["Drought-tolerant seed","Conservation tillage"],"rightTitle":"Enablers","right":["Extension services","Micro-finance"]},
- {"layout":"quote","quote":"We do not inherit the land from our ancestors; we borrow it from our children.","attribution":"Proverb"},
- {"layout":"content","title":"The way forward","bullets":["Scale proven practices","Invest in farmer training","Link data to decisions"],"notes":"Close with a call to action."}
+EXAMPLE (emulate this quality — adapt to the real topic):
+{"type":"deck","title":"Unlocking Adelani AI Chat","kicker":"PRODUCT GUIDE","theme":"executive","slides":[
+ {"layout":"title","title":"Unlocking Adelani AI Chat","subtitle":"Your multi-agent AI assistant","kicker":"PRODUCT GUIDE"},
+ {"layout":"section","title":"Meet the Agents","number":"01"},
+ {"layout":"grid","title":"Seven specialised agents","items":[
+   {"icon":"💬","title":"Asha","text":"Everyday assistant"},
+   {"icon":"🎓","title":"Scholar","text":"Research & study"},
+   {"icon":"💼","title":"Bizna","text":"Business & productivity"},
+   {"icon":"🎨","title":"Grace","text":"Slides & graphics"}]},
+ {"layout":"features","title":"Why teams love it","items":[
+   {"icon":"⚡","title":"Fast","text":"Answers in seconds"},
+   {"icon":"🌍","title":"Works offline","text":"Built for low-connectivity"},
+   {"icon":"🔒","title":"Private","text":"Your data stays yours"}]},
+ {"layout":"steps","title":"Get started in 3 steps","items":[
+   {"title":"Pick an agent","text":"Choose the right specialist"},
+   {"title":"Ask or upload","text":"Type a prompt or drop a file"},
+   {"title":"Download","text":"Save your result"}]},
+ {"layout":"quote","quote":"The best AI is the one that gets out of your way.","attribution":"Adelani AI"}
 ]}
 
 GRAPHIC JSON: {"type":"image","prompt":"rich detailed prompt","width":1024,"height":1024,"caption":"..."}
