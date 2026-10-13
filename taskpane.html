@@ -446,11 +446,10 @@ async function sendMessage() {
       body: JSON.stringify({
         messages: apiMessages,
         systemPrompt: currentAgent.system +
-          " You are currently integrated into Microsoft " + APP_CONFIG[currentApp].name + ".",
-        model: "meta-llama/llama-3.1-8b-instruct"
+          " You are currently integrated into Microsoft " + APP_CONFIG[currentApp].name + "."
       })
     });
-    const d = await r.json();
+    const d = await r.json().catch(() => ({error: "Server error (HTTP " + r.status + ")."}));
     const reply = d.reply || (d.error ? "⚠️ " + d.error : "No response.");
     addMessage("assistant", reply);
     lastReply = reply;

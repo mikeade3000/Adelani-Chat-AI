@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Adelani AI Chat</title>
 <!-- Times New Roman loaded from system — no external font needed -->
-<!-- Libraries bundled LOCALLY (React 18.3.1, ReactDOM 18.3.1, Babel 7.29.7).
+<!-- Libraries bundled LOCALLY in ./vendor (React 18.3.1, ReactDOM 18.3.1, Babel 7.29.7).
      No external CDN — loads reliably even on low-connectivity networks. -->
 <script src="./vendor/react.production.min.js"></script>
 <script src="./vendor/react-dom.production.min.js"></script>
@@ -102,7 +102,7 @@ button:active{transform:scale(0.96)}
   window.addEventListener("unhandledrejection", function(e){
     showError("A background task failed.", (e.reason && (e.reason.stack||e.reason.message)) || String(e.reason));
   });
-  // Watchdog: if React hasn't mounted in 8s, Babel/CDN probably failed
+  // Watchdog: if React hasn't mounted in 8s, a vendor script probably failed
   window.__adelaniWatchdog = setTimeout(function(){
     var r = document.getElementById("root");
     if(r && r.getAttribute("data-mounted")!=="1"){
@@ -110,10 +110,10 @@ button:active{transform:scale(0.96)}
       var reactMissing = (typeof React === "undefined");
       showError(
         "The app did not start within 8 seconds.",
-        (reactMissing ? "• React failed to load from the CDN.\n" : "")
-        + (babelMissing ? "• Babel failed to load from the CDN (check the pinned version).\n" : "")
+        (reactMissing ? "• React failed to load from ./vendor/react.production.min.js.\n" : "")
+        + (babelMissing ? "• Babel failed to load from ./vendor/babel.min.js.\n" : "")
         + (!babelMissing && !reactMissing ? "• Libraries loaded, but the app code did not run.\nOpen the browser console for the exact line." : "")
-        + "\nCheck your internet connection and that unpkg.com is reachable."
+        + "\nCheck that the vendor/ folder was deployed alongside index.html."
       );
     }
   }, 8000);
@@ -125,12 +125,11 @@ const {useState,useEffect,useRef,useCallback} = React;
 
 /* ══════════ CONFIG ══════════ */
 const BACKEND     = "https://adelani-ai-backend.onrender.com";
-const HEAVY_MODEL = "meta-llama/llama-3.1-70b-instruct"; // used only for registered-user full Scholar articles
-/* Grace's brain. A stronger model = far better decks. Change this one line to upgrade.
-   Strong picks on OpenRouter (2026): "deepseek/deepseek-chat" (great value),
-   "anthropic/claude-sonnet-4.6", "openai/gpt-5.5", "google/gemini-2.5-pro",
-   "qwen/qwen3.6-plus". If the chosen model errors, Grace auto-falls back to HEAVY_MODEL. */
-const GRACE_MODEL = "deepseek/deepseek-chat";
+/* Model tiers. The actual OpenRouter models (with fallbacks) are chosen by the
+   backend — see MODEL_TIERS in server.js, or set CHAT_MODELS / HEAVY_MODELS /
+   GRACE_MODELS / VISION_MODELS on Render to change them without a redeploy here. */
+const HEAVY_MODEL = "heavy"; // registered-user full Scholar articles
+const GRACE_MODEL = "grace"; // Grace's slides & graphics — falls back to HEAVY_MODEL
 const DAILY_LIMIT = 10;
 const WA_LINK     = "https://wa.me/2348115800375?text=" + encodeURIComponent("Hello Dr. Adewusi, I'd like to upgrade to Adelani AI Premium.");
 
@@ -985,7 +984,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
       const r=await fetch(BACKEND+"/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
       const d=await r.json();
       if(!r.ok){setErr(d.error||"Login failed.");setBusy(false);return;}
-      ls.set("adl-ses",{...d,expiresAt:Date.now()+7*86400000});onAuth(d);
+      ls.set("adl-ses",{...d,expiresAt:Date.now()+(d.role==="admin"?12*3600000:7*86400000)});onAuth(d);
     }catch(e){setErr("Cannot reach server.");}
     setBusy(false);
   };
@@ -1067,14 +1066,14 @@ function AuthScreen({onAuth,onGuest,t,dark}){
 
 /* ══════════ ADMIN PANEL ══════════ */
 function AdminPanel({onBack,t,dark,toggleTheme}){
-  const SECRET="adelani-admin-2024";
+  const authHdr={"Authorization":"Bearer "+((ls.get("adl-ses")||{}).sessionToken||"")};
   const [users,setUsers]=useState([]);
   const [busy,setBusy]=useState(false);
   const [toast,setToast]=useState("");
   const showT=m=>{setToast(m);setTimeout(()=>setToast(""),2500);};
-  useEffect(()=>{(async()=>{setBusy(true);try{const r=await fetch(BACKEND+"/api/admin/users?secret="+SECRET);const d=await r.json();if(Array.isArray(d))setUsers(d);}catch{}setBusy(false);})();},[]);
+  useEffect(()=>{(async()=>{setBusy(true);try{const r=await fetch(BACKEND+"/api/admin/users",{headers:authHdr});const d=await r.json();if(Array.isArray(d))setUsers(d);else if(r.status===403)showT("Admin session expired — sign in again.");}catch{}setBusy(false);})();},[]);
   const act=async(username,action)=>{
-    try{const r=await fetch(BACKEND+"/api/admin/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({secret:SECRET,username,action})});
+    try{const r=await fetch(BACKEND+"/api/admin/action",{method:"POST",headers:{"Content-Type":"application/json",...authHdr},body:JSON.stringify({username,action})});
       const d=await r.json();if(d.success){setUsers(p=>action==="delete"?p.filter(u=>u.username!==username):p.map(u=>u.username===username?{...u,...d.user}:u));showT("Done!");}}
     catch{showT("Error");}
   };
@@ -1400,7 +1399,6 @@ If source material is provided, base the design on it. Output JSON only.`;
     const payload={
       messages:apiMessages,
       systemPrompt:agent.system,
-      model:"meta-llama/llama-3.1-8b-instruct",
       hasImage:hist.some(m=>m.image),
       username:ses.username||null,
       sessionToken:ses.sessionToken||null
@@ -1580,7 +1578,7 @@ If source material is provided, base the design on it. Output JSON only.`;
                 {[
                   agent.id==="asha"?"What can you help me with?":null,
                   agent.id==="scholar"?"Help me design a curriculum":null,
-                  agent.id==="bizna"?"African startup ideas for 2025":null,
+                  agent.id==="bizna"?`African startup ideas for ${new Date().getFullYear()}`:null,
                   agent.id==="dawa"?"Daily habits for better health":null,
                   agent.id==="ubuntu"?"Teach me a Yoruba proverb":null,
                   agent.id==="nexus"?"What's trending in AI today?":null,
