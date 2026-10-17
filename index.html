@@ -3,10 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-<meta name="theme-color" content="#F2ECE0"/>
+<meta name="theme-color" content="#F4EEE2"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Adelani AI Chat</title>
-<!-- Times New Roman loaded from system — no external font needed -->
+<!-- Classical typefaces (Garamond). display=swap: text shows at once in Times New Roman
+     and switches to Garamond when the font arrives — fine on slow connections. -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
 <!-- Libraries bundled LOCALLY in ./vendor (React 18.3.1, ReactDOM 18.3.1, Babel 7.29.7).
      No external CDN — loads reliably even on low-connectivity networks.
      Babel is only loaded when needed — see "FAST START" at the bottom of the page. -->
@@ -16,7 +20,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body,#root{height:100%;overflow:hidden}
-body{font-family:'Times New Roman', Times, serif;overscroll-behavior:none;background:#F2ECE0}
+body{font-family:'EB Garamond','Times New Roman',serif;overscroll-behavior:none;background:#F4EEE2;font-feature-settings:"liga","kern","onum"}
 textarea,input{resize:none;outline:none;border:none;-webkit-appearance:none;background:transparent}
 /* Allow text selection and copying on AI responses */
 .md, .msg-selectable{
@@ -28,7 +32,7 @@ textarea,input{resize:none;outline:none;border:none;-webkit-appearance:none;back
 button{cursor:pointer;border:none;background:none;font-family:inherit;transition:opacity .15s,transform .1s}
 button:active{transform:scale(0.96)}
 ::-webkit-scrollbar{width:3px}
-::-webkit-scrollbar-thumb{background:#C8C0B0;border-radius:3px}
+::-webkit-scrollbar-thumb{background:#CDBE9F;border-radius:3px}
 @keyframes spin   {to{transform:rotate(360deg)}}
 @keyframes bop    {0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 @keyframes fadeUp {from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -40,10 +44,14 @@ button:active{transform:scale(0.96)}
 @keyframes globePulse{0%,100%{filter:drop-shadow(0 0 16px rgba(100,180,255,.5))}50%{filter:drop-shadow(0 0 28px rgba(100,180,255,.8))}}
 .md b,.md strong{font-weight:700}
 .md em,.md i{font-style:italic}
-.md .h1{font-family:'Times New Roman', Times, serif;font-weight:700;font-size:17px;margin:12px 0 5px}
-.md .h2{font-family:'Times New Roman', Times, serif;font-weight:600;font-size:15.5px;margin:10px 0 4px}
-.md .h3{font-weight:600;font-size:15px;margin:8px 0 3px}
-.md .li{display:flex;gap:8px;margin:3px 0;line-height:1.65}
+.md .h1{font-family:'Cormorant Garamond','EB Garamond',serif;font-weight:700;font-size:23px;line-height:1.25;margin:14px 0 6px;letter-spacing:.2px}
+.md .h2{font-family:'Cormorant Garamond','EB Garamond',serif;font-weight:700;font-size:20px;line-height:1.3;margin:12px 0 5px}
+.md .h3{font-weight:600;font-size:17px;margin:10px 0 4px;font-variant:small-caps;letter-spacing:.4px}
+.md .li{display:flex;gap:9px;margin:5px 0;line-height:1.7}
+.md .gap{height:9px}
+.md .rule{border:none;height:1px;margin:14px 0;background:linear-gradient(90deg,transparent,#B08D3C99,transparent)}
+.md a{text-underline-offset:2px}
+.md>:first-child{margin-top:0}
 .md code{font-family:monospace;font-size:13px;padding:2px 6px;border-radius:5px}
 .md pre{border-radius:10px;padding:13px;overflow-x:auto;margin:8px 0;font-size:12.5px;line-height:1.6}
 </style>
@@ -125,7 +133,7 @@ button:active{transform:scale(0.96)}
 const {useState,useEffect,useRef,useCallback} = React;
 
 /* ══════════ CONFIG ══════════ */
-const BACKEND     = window.ADELANI_BACKEND || "https://adelani-ai-backend.YOUR-SUBDOMAIN.workers.dev"; // set in config.js
+const BACKEND     = window.ADELANI_BACKEND || "https://adelani-ai-backend.mikeade3000.workers.dev"; // set in config.js
 /* Model tiers. The actual OpenRouter models (with fallbacks) are chosen by the
    backend — see MODEL_TIERS in server.js, or set CHAT_MODELS / HEAVY_MODELS /
    GRACE_MODELS / VISION_MODELS on Render to change them without a redeploy here. */
@@ -150,25 +158,27 @@ const limitHit  = ()=>getUsage().n>=DAILY_LIMIT;
 
 /* ══════════ THEME ══════════ */
 const TH={
-  light:{bg:"#F2ECE0",surf:"#FBF8F1",card:"#FFFFFF",border:"#E2D9CA",text:"#1A1208",muted:"#7A7070",dim:"#C8C0B0",inp:"#EDE8DF",bub:"#FFFFFF",bubBrd:"#E2D9CA"},
-  dark: {bg:"#0A0A0B",surf:"#0D0D0F",card:"#111113",border:"#1A1A1C",text:"#EDE5D8",muted:"#5A5A6A",dim:"#252528",inp:"#141416",bub:"#141416",bubBrd:"#222226"}
+  light:{bg:"#F4EEE2",surf:"#FBF7EF",card:"#FFFDF8",border:"#E3D7C1",text:"#2A2118",muted:"#7D6E5B",dim:"#C9BBA3",inp:"#F5EFE3",bub:"#FFFDF8",bubBrd:"#E6DAC4",gold:"#A8843A"},
+  dark: {bg:"#12100D",surf:"#17140F",card:"#1D1913",border:"#2F2920",text:"#EDE3D1",muted:"#9A8C76",dim:"#4A4234",inp:"#1D1913",bub:"#1A1712",bubBrd:"#2F2920",gold:"#C9A65A"}
 };
+const SERIF="'EB Garamond','Times New Roman',serif";
+const DISPLAY="'Cormorant Garamond','EB Garamond','Times New Roman',serif";
 
 /* ══════════ AGENTS ══════════ */
 const AGENTS=[
-  {id:"asha",   name:"Asha",   icon:"✦",role:"General Intelligence",      color:"#4A7A2E",
+  {id:"asha",   name:"Asha",   icon:"✦",role:"General Intelligence",      color:"#9B2F42",
    system:"You are Asha, Adelani AI Chat's warm and highly intelligent general assistant. Give rich, accurate, well-structured answers. When a file or document is shared, analyse it thoroughly."},
-  {id:"scholar",name:"Scholar",icon:"◈",role:"Education & Research",       color:"#4A7A2E",
+  {id:"scholar",name:"Scholar",icon:"◈",role:"Education & Research",       color:"#2F5687",
    system:"You are Scholar, Adelani AI Chat's academic intelligence. Excel at curriculum design, research methodology, academic writing, and CBE frameworks. Analyse any shared documents deeply."},
-  {id:"bizna",  name:"Bizna",  icon:"◆",role:"Business & Productivity",    color:"#4A7A2E",
+  {id:"bizna",  name:"Bizna",  icon:"◆",role:"Business & Productivity",    color:"#8A5A1C",
    system:"You are Bizna, Adelani AI Chat's business intelligence. Help with strategy, entrepreneurship, marketing, finance. Analyse any shared documents or data files thoroughly."},
-  {id:"dawa",   name:"Dawa",   icon:"✿",role:"Health & Wellbeing",          color:"#4A7A2E",
+  {id:"dawa",   name:"Dawa",   icon:"✿",role:"Health & Wellbeing",          color:"#2F6E50",
    system:"You are Dawa, Adelani AI Chat's health companion. Provide health information and wellness guidance. Analyse any shared medical documents carefully, always recommending professional consultation."},
-  {id:"ubuntu", name:"Ubuntu", icon:"◉",role:"African Languages & Culture", color:"#4A7A2E",
+  {id:"ubuntu", name:"Ubuntu", icon:"◉",role:"African Languages & Culture", color:"#A4512A",
    system:"You are Ubuntu. Expert in African languages, cultures, histories, and philosophies. Analyse any shared documents or images with cultural sensitivity."},
-  {id:"nexus",  name:"Nexus",  icon:"⊕",role:"Live Web Research",           color:"#4A7A2E",web:true,
+  {id:"nexus",  name:"Nexus",  icon:"⊕",role:"Live Web Research",           color:"#5E4388",web:true,
    system:"You are Nexus, Adelani AI Chat's live research agent. Search the internet in real time. Synthesize results into clear responses and cite sources. Analyse any shared files too."},
-  {id:"studio", name:"Grace" , icon:"◭",role:"Design · Slides & Graphics",  color:"#4A7A2E",design:true,
+  {id:"studio", name:"Grace" , icon:"◭",role:"Design · Slides & Graphics",  color:"#256F75",design:true,
    system:"You are Grace, Adelani AI Chat's design agent. You create PowerPoint presentations and graphics, and can redesign uploaded slides, PDFs or images. Be visual, structured and creative."}
 ];
 
@@ -773,24 +783,28 @@ function renderElements(s,els,ctx){
 
 /* ══════════ MARKDOWN ══════════ */
 function md(raw,accent,dark){
-  const cc=dark?"rgba(255,255,255,.09)":"rgba(0,0,0,.07)";
-  const pc=dark?"#0F0F11":"#EDE8DF";
+  const cc=dark?"rgba(255,255,255,.08)":"rgba(90,60,20,.07)";
+  const pc=dark?"#14110D":"#F4EEE2";
+  const NL="\u0000"; // keeps line breaks inside code blocks out of the paragraph logic below
   let t=raw.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  t=t.replace(/```[\w]*\n?([\s\S]*?)```/g,`<pre style="background:${pc};border:1px solid ${dark?"#222":"#ddd"}"><code>$1</code></pre>`);
+  t=t.replace(/```[\w]*\n?([\s\S]*?)```/g,(m,code)=>`<pre style="background:${pc};border:1px solid ${dark?"#2F2920":"#E3D7C1"}"><code>${code.replace(/\n/g,NL)}</code></pre>`);
   t=t.replace(/`([^`\n]+)`/g,`<code style="background:${cc}">$1</code>`);
   t=t.replace(/\*\*([^*\n]+)\*\*/g,"<strong>$1</strong>");
   t=t.replace(/\*([^*\n]+)\*/g,"<em>$1</em>");
+  t=t.replace(/^\s*(?:---+|\*\*\*+|___+)\s*$/gm,'<div class="rule"></div>');
   t=t.replace(/^### (.+)$/gm,'<div class="h3">$1</div>');
   t=t.replace(/^## (.+)$/gm,'<div class="h2">$1</div>');
   t=t.replace(/^# (.+)$/gm,'<div class="h1">$1</div>');
-  t=t.replace(/^\d+\.\s(.+)$/gm,(m,p,off,s)=>{
-    const n=s.slice(0,off).split("\n").filter(l=>/^\d+\./.test(l)).length+1;
-    return `<div class="li"><span style="color:${accent};font-weight:700;flex-shrink:0;min-width:20px">${n}.</span><span>${p}</span></div>`;
-  });
-  t=t.replace(/^[-*]\s(.+)$/gm,`<div class="li"><span style="color:${accent};font-weight:700;flex-shrink:0">•</span><span>$1</span></div>`);
-  t=t.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,`<a href="$2" target="_blank" style="color:${accent};text-decoration:underline">$1</a>`);
+  t=t.replace(/^\s*(\d+)\.\s(.+)$/gm,(m,n,p)=>`<div class="li"><span style="color:${accent};font-weight:700;flex-shrink:0;min-width:22px;font-variant-numeric:oldstyle-nums">${n}.</span><span>${p}</span></div>`);
+  t=t.replace(/^\s*[-*•]\s(.+)$/gm,`<div class="li"><span style="color:${accent};flex-shrink:0">❧</span><span>$1</span></div>`);
+  t=t.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,`<a href="$2" target="_blank" rel="noopener noreferrer" style="color:${accent};text-decoration:underline">$1</a>`);
+  // Line breaks: block elements already start on their own line, so drop the
+  // newline right before/after them; a blank line elsewhere becomes a small gap.
+  t=t.replace(/(<\/div>|<\/pre>)\n/g,"$1");
+  t=t.replace(/\n(<div class=|<pre)/g,"$1");
+  t=t.replace(/\n{2,}/g,'<div class="gap"></div>');
   t=t.replace(/\n/g,"<br/>");
-  return t;
+  return t.split(NL).join("\n");
 }
 
 /* ══════════ SMALL COMPONENTS ══════════ */
@@ -799,7 +813,7 @@ function Spinner({size=16,color="#FFF"}){
 }
 function Dots({color}){
   return <div style={{display:"flex",gap:5,padding:"12px 16px"}}>
-    {[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:color,animation:`bop 1.3s ease-in-out ${i*.22}s infinite`}}/>)}
+    {[0,1,2].map(i=><div key={i} style={{width:6,height:6,transform:"rotate(45deg)",background:color,opacity:.85,animation:`bop 1.3s ease-in-out ${i*.22}s infinite`}}/>)}
   </div>;
 }
 function Globe(){
@@ -833,11 +847,11 @@ function WhatsNewModal({t,dark,onClose}){
       <div style={{background:dark?"#111113":t.card,borderRadius:26,border:`1px solid ${t.border}`,maxWidth:420,width:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 40px 100px rgba(0,0,0,.6)",animation:"popIn .35s cubic-bezier(0.34,1.56,0.64,1)"}}>
 
         {/* Header */}
-        <div style={{background:"linear-gradient(135deg,#4A7A2E,#8B7218)",padding:"24px 24px 20px",flexShrink:0}}>
+        <div style={{background:"linear-gradient(135deg,#7A2232,#561520)",padding:"24px 24px 20px",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
             <span style={{fontSize:28}}>🚀</span>
             <div>
-              <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:19,color:"#FFF",letterSpacing:"-.3px"}}>What's New in Adelani AI</div>
+              <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:19,color:"#FFF",letterSpacing:"-.3px"}}>What's New in Adelani AI</div>
               <div style={{fontSize:11.5,color:"rgba(255,255,255,.75)",marginTop:2,letterSpacing:"1px"}}>NEW UPDATE — FILE INTELLIGENCE</div>
             </div>
           </div>
@@ -852,22 +866,22 @@ function WhatsNewModal({t,dark,onClose}){
           {/* Feature groups */}
           {[
             {
-              icon:"📄",label:"Documents",color:"#4A7A2E",
+              icon:"📄",label:"Documents",color:"#7A2232",
               items:["PDF files (up to 25 pages)","Word (.docx / .doc)","ODT documents"]
             },
             {
-              icon:"📊",label:"Data & Spreadsheets",color:"#4A7A2E",
+              icon:"📊",label:"Data & Spreadsheets",color:"#7A2232",
               items:["Excel (.xlsx / .xls) — all sheets","CSV data files","PowerPoint (.pptx) — all slides"]
             },
             {
-              icon:"🖼️",label:"Images",color:"#4A7A2E",
+              icon:"🖼️",label:"Images",color:"#7A2232",
               items:["JPG, PNG, GIF, WebP, TIFF","SVG graphics","Full AI vision analysis"]
             },
           ].map(g=>(
             <div key={g.label} style={{marginBottom:14,padding:"12px 14px",borderRadius:13,background:dark?"rgba(255,255,255,.04)":"rgba(0,0,0,.03)",border:`1px solid ${t.border}`}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                 <span style={{fontSize:18}}>{g.icon}</span>
-                <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:13.5,color:g.color}}>{g.label}</span>
+                <span style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:700,fontSize:13.5,color:g.color}}>{g.label}</span>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {g.items.map(item=>(
@@ -878,8 +892,8 @@ function WhatsNewModal({t,dark,onClose}){
           ))}
 
           {/* How to use */}
-          <div style={{padding:"12px 14px",borderRadius:13,background:dark?"rgba(74,122,46,.07)":"rgba(74,122,46,.06)",border:"1px solid rgba(74,122,46,.25)",marginBottom:16}}>
-            <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:13,color:"#4A7A2E",marginBottom:8}}>How to use</div>
+          <div style={{padding:"12px 14px",borderRadius:13,background:dark?"rgba(122,34,50,.07)":"rgba(122,34,50,.06)",border:"1px solid rgba(122,34,50,.25)",marginBottom:16}}>
+            <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:700,fontSize:13,color:"#7A2232",marginBottom:8}}>How to use</div>
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {[
                 ["📎","Tap the paperclip button in the chat input"],
@@ -897,7 +911,7 @@ function WhatsNewModal({t,dark,onClose}){
 
           {/* Dismiss button */}
           <button onPointerDown={onClose}
-            style={{width:"100%",padding:"13px",borderRadius:13,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(74,122,46,.35)"}}>
+            style={{width:"100%",padding:"13px",borderRadius:13,background:"linear-gradient(135deg,#7A2232,#561520)",border:"none",color:"#FFF",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(122,34,50,.35)"}}>
             Got it, let's go! →
           </button>
         </div>
@@ -912,24 +926,24 @@ function LimitModal({t,dark,onClose}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeIn .2s ease"}}
          onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={{background:dark?"#111113":t.card,borderRadius:24,border:`1px solid ${t.border}`,maxWidth:390,width:"100%",overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,.5)",animation:"popIn .3s ease"}}>
-        <div style={{background:"linear-gradient(145deg,rgba(37,211,102,.1),rgba(74,122,46,.08))",padding:"28px 24px 20px",textAlign:"center",borderBottom:`1px solid ${t.border}`}}>
+        <div style={{background:"linear-gradient(145deg,rgba(37,211,102,.1),rgba(122,34,50,.08))",padding:"28px 24px 20px",textAlign:"center",borderBottom:`1px solid ${t.border}`}}>
           <div style={{fontSize:50,marginBottom:10}}>🔒</div>
-          <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:21,color:t.text,marginBottom:8}}>Daily Limit Reached</div>
-          <div style={{color:t.muted,fontSize:14.5,lineHeight:1.65}}>You've used your <strong style={{color:"#4A7A2E"}}>10 free daily messages</strong>. Upgrade to Premium for unlimited access.</div>
+          <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:21,color:t.text,marginBottom:8}}>Daily Limit Reached</div>
+          <div style={{color:t.muted,fontSize:14.5,lineHeight:1.65}}>You've used your <strong style={{color:"#7A2232"}}>10 free daily messages</strong>. Upgrade to Premium for unlimited access.</div>
         </div>
         <div style={{padding:"20px 24px 24px"}}>
           <div style={{background:"rgba(37,211,102,.07)",border:"1.5px solid rgba(37,211,102,.28)",borderRadius:14,padding:"16px",marginBottom:16,textAlign:"center"}}>
             <div style={{fontSize:12,color:t.muted,letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Contact for Premium</div>
-            <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16,color:t.text,marginBottom:4}}>Dr. Michael Adelani Adewusi</div>
-            <div style={{fontSize:15.5,color:"#4A7A2E",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
+            <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:16,color:t.text,marginBottom:4}}>Dr. Michael Adelani Adewusi</div>
+            <div style={{fontSize:15.5,color:"#7A2232",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
           </div>
           <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,textDecoration:"none",marginBottom:10}}>
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:15.5,textDecoration:"none",marginBottom:10}}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
             Get Premium on WhatsApp →
           </a>
           <button onPointerDown={onClose} style={{width:"100%",padding:"11px",borderRadius:12,border:`1px solid ${t.border}`,color:t.muted,fontSize:14,cursor:"pointer",background:"transparent"}}>Maybe Later</button>
-          <div style={{textAlign:"center",marginTop:12,fontSize:12.5,color:t.muted}}>🔄 Resets daily · <span style={{color:"#4A7A2E",fontWeight:600}}>Premium = Unlimited</span></div>
+          <div style={{textAlign:"center",marginTop:12,fontSize:12.5,color:t.muted}}>🔄 Resets daily · <span style={{color:"#7A2232",fontWeight:600}}>Premium = Unlimited</span></div>
         </div>
       </div>
     </div>
@@ -941,8 +955,8 @@ function Bubble({msg,agent,t,dark}){
   const u=msg.role==="user";
   return(
     <div style={{display:"flex",justifyContent:u?"flex-end":"flex-start",marginBottom:16,gap:9,animation:"fadeUp .3s ease"}}>
-      {!u&&<div style={{width:32,height:32,borderRadius:"50%",background:`${agent.color}20`,border:`1.5px solid ${agent.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:agent.color,flexShrink:0,marginTop:2}}>{agent.icon}</div>}
-      <div style={{maxWidth:"78%",display:"flex",flexDirection:"column",alignItems:u?"flex-end":"flex-start"}}>
+      {!u&&<div style={{width:34,height:34,borderRadius:"50%",background:t.card,border:`1px solid ${t.gold}`,boxShadow:`inset 0 0 0 3px ${t.card}, inset 0 0 0 4px ${agent.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:agent.color,flexShrink:0,marginTop:2}}>{agent.icon}</div>}
+      <div style={{maxWidth:u?"76%":"min(780px,86%)",display:"flex",flexDirection:"column",alignItems:u?"flex-end":"flex-start"}}>
         {/* File card for uploaded files */}
         {msg.fileName&&(
           <div style={{marginBottom:6}}>
@@ -953,8 +967,8 @@ function Bubble({msg,agent,t,dark}){
         {msg.image&&<img src={`data:image/jpeg;base64,${msg.image}`} style={{maxWidth:200,borderRadius:10,marginBottom:6,border:`1px solid ${t.border}`}} alt=""/>}
         {/* Message bubble */}
         {msg.content&&(
-          <div className="md" style={{padding:"12px 16px",borderRadius:u?"18px 18px 4px 18px":"18px 18px 18px 4px",background:u?`linear-gradient(135deg,${agent.color}E0,${agent.color}A0)`:t.bub,color:u?"#FFF":t.text,fontSize:15.5,lineHeight:1.75,wordBreak:"break-word",border:u?"none":`1px solid ${t.bubBrd}`,boxShadow:u?`0 3px 16px ${agent.color}30`:"0 2px 6px rgba(0,0,0,.08)",WebkitUserSelect:"text",MozUserSelect:"text",userSelect:"text",cursor:"text"}}
-            dangerouslySetInnerHTML={u?undefined:{__html:md(msg.content,agent.color,dark)}}>
+          <div className="md" style={{padding:u?"11px 18px":"16px 22px 16px 20px",borderRadius:u?"14px 14px 3px 14px":"3px 14px 14px 14px",background:u?agent.color:t.bub,color:u?"#FFFBF2":t.text,fontSize:17,lineHeight:1.72,wordBreak:"break-word",border:u?`1px solid ${agent.color}`:`1px solid ${t.bubBrd}`,borderLeft:u?undefined:`3px solid ${agent.color}`,boxShadow:u?`0 4px 14px ${agent.color}33`:(dark?"0 2px 10px rgba(0,0,0,.35)":"0 1px 2px rgba(60,40,10,.06), 0 6px 18px rgba(60,40,10,.06)"),WebkitUserSelect:"text",MozUserSelect:"text",userSelect:"text",cursor:"text"}}
+            dangerouslySetInnerHTML={u?undefined:{__html:md(msg.content,dark?t.gold:agent.color,dark)}}>
             {u?msg.content:undefined}
           </div>
         )}
@@ -965,16 +979,16 @@ function Bubble({msg,agent,t,dark}){
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{fontSize:22}}>{msg.design.kind==="image"?"🎨":"📊"}</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:14,color:t.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{msg.design.filename}</div>
+                <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:700,fontSize:14,color:t.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{msg.design.filename}</div>
                 <div style={{fontSize:11.5,color:t.muted}}>{msg.design.kind==="image"?"Graphic · PNG":"Presentation · PPTX"}</div>
               </div>
               <a href={msg.design.url} download={msg.design.filename} target="_blank" rel="noopener" style={{textDecoration:"none"}}>
-                <button style={{height:34,padding:"0 14px",borderRadius:9,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'Times New Roman', Times, serif",cursor:"pointer",whiteSpace:"nowrap"}}>⬇ Save</button>
+                <button style={{height:34,padding:"0 14px",borderRadius:9,background:"linear-gradient(135deg,#7A2232,#561520)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'EB Garamond','Times New Roman',serif",cursor:"pointer",whiteSpace:"nowrap"}}>⬇ Save</button>
               </a>
             </div>
           </div>
         )}
-        <div style={{fontSize:11.5,color:t.muted,marginTop:3}}>{fmtTime(msg.timestamp)}</div>
+        <div style={{fontSize:12,color:t.muted,marginTop:4,fontStyle:"italic",letterSpacing:".2px"}}>{u?"You":agent.name} · {fmtTime(msg.timestamp)}</div>
       </div>
     </div>
   );
@@ -984,39 +998,42 @@ function Bubble({msg,agent,t,dark}){
 function Sidebar({t,dark,agent,agents,user,isGuest,onSwitch,onAdmin,onLogout}){
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:t.surf}}>
-      <div style={{padding:"20px 16px 14px",borderBottom:`1px solid ${t.border}`,flexShrink:0}}>
-        <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:18,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
-        <div style={{fontSize:10,color:t.muted,marginTop:2,letterSpacing:"2.5px",textTransform:"uppercase",fontWeight:600}}>Multi-Agent Chat</div>
+      <div style={{padding:"22px 16px 16px",borderBottom:`3px double ${t.border}`,flexShrink:0,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:44,height:44,borderRadius:"50%",background:"linear-gradient(135deg,#7A2232,#561520)",border:`1.5px solid ${t.gold}`,boxShadow:`0 0 0 3px ${t.surf}, 0 0 0 4px ${t.gold}66`,display:"flex",alignItems:"center",justifyContent:"center",color:"#F3DFA8",fontFamily:DISPLAY,fontWeight:700,fontSize:23,flexShrink:0}}>A</div>
+        <div>
+          <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:24,lineHeight:1,color:t.text,letterSpacing:".3px"}}>Adelani <span style={{color:t.gold}}>AI</span></div>
+          <div style={{fontSize:11,color:t.muted,marginTop:4,letterSpacing:"2.5px",textTransform:"uppercase",fontStyle:"italic"}}>The crown that opens paths</div>
+        </div>
       </div>
       <div style={{padding:"10px",borderBottom:`1px solid ${t.border}`,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:t.inp,border:`1px solid ${t.border}`}}>
-          <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,rgba(74,122,46,.22),rgba(74,122,46,.14))",border:"1.5px solid rgba(74,122,46,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Times New Roman', Times, serif",fontWeight:700,color:"#4A7A2E",fontSize:14,flexShrink:0}}>
+          <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,rgba(122,34,50,.22),rgba(122,34,50,.14))",border:"1.5px solid rgba(122,34,50,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:700,color:"#7A2232",fontSize:14,flexShrink:0}}>
             {isGuest?"G":user?.username?.[0]?.toUpperCase()||"U"}
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:600,fontSize:14,color:t.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isGuest?"Guest User":user?.username}</div>
             <div style={{fontSize:11,color:t.muted,marginTop:1}}>{user?.role==="admin"?"⚙ Administrator":"✦ Adelani AI"}</div>
           </div>
-          {user?.role==="admin"&&<button onPointerDown={onAdmin} style={{padding:"3px 8px",borderRadius:7,background:"rgba(74,122,46,.12)",border:"1px solid rgba(74,122,46,.3)",color:"#4A7A2E",fontSize:12,fontWeight:700,cursor:"pointer"}}>⚙</button>}
+          {user?.role==="admin"&&<button onPointerDown={onAdmin} style={{padding:"3px 8px",borderRadius:7,background:"rgba(122,34,50,.12)",border:"1px solid rgba(122,34,50,.3)",color:"#7A2232",fontSize:12,fontWeight:700,cursor:"pointer"}}>⚙</button>}
         </div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
-        <div style={{fontSize:10,color:t.muted,letterSpacing:"2.5px",textTransform:"uppercase",padding:"5px 8px 9px",fontWeight:700}}>AI Agents</div>
+        <div style={{fontSize:11,color:t.gold,letterSpacing:"3px",textTransform:"uppercase",padding:"8px 8px 10px",fontWeight:600,display:"flex",alignItems:"center",gap:8}}><span style={{flex:1,height:1,background:`linear-gradient(90deg,transparent,${t.gold}88)`}}/>Agents<span style={{flex:1,height:1,background:`linear-gradient(90deg,${t.gold}88,transparent)`}}/></div>
         {agents.map(a=>(
           <div key={a.id} onPointerDown={()=>onSwitch(a)}
-            style={{padding:"10px 11px",borderRadius:12,marginBottom:3,cursor:"pointer",background:agent.id===a.id?`${a.color}12`:"transparent",border:agent.id===a.id?`1px solid ${a.color}32`:"1px solid transparent",display:"flex",alignItems:"center",gap:9,transition:"background .15s"}}>
-            <div style={{width:35,height:35,borderRadius:10,background:`${a.color}14`,border:`1px solid ${a.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:a.color,flexShrink:0}}>{a.icon}</div>
+            style={{padding:"9px 11px",borderRadius:4,marginBottom:2,cursor:"pointer",background:agent.id===a.id?t.card:"transparent",borderLeft:`3px solid ${agent.id===a.id?a.color:"transparent"}`,boxShadow:agent.id===a.id?(dark?"0 1px 6px rgba(0,0,0,.3)":"0 1px 4px rgba(60,40,10,.08)"):"none",display:"flex",alignItems:"center",gap:11,transition:"background .15s"}}>
+            <div style={{width:34,height:34,borderRadius:"50%",background:agent.id===a.id?a.color:"transparent",border:`1px solid ${agent.id===a.id?a.color:a.color+"55"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:agent.id===a.id?"#FFFBF2":a.color,filter:dark&&agent.id!==a.id?"brightness(1.6)":"none",flexShrink:0}}>{a.icon}</div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:600,fontSize:14,color:agent.id===a.id?a.color:t.text}}>{a.name}</div>
-              <div style={{fontSize:11.5,color:t.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.role}</div>
+              <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:18,lineHeight:1.15,color:t.text}}>{a.name}</div>
+              <div style={{fontSize:12.5,color:t.muted,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.role}</div>
             </div>
             {a.web&&<span style={{fontSize:9,color:a.color,background:`${a.color}16`,padding:"2px 6px",borderRadius:8,border:`1px solid ${a.color}28`,fontWeight:700}}>LIVE</span>}
-            {agent.id===a.id&&<div style={{width:5,height:5,borderRadius:"50%",background:a.color,flexShrink:0}}/>}
+            {agent.id===a.id&&<div style={{width:6,height:6,transform:"rotate(45deg)",background:t.gold,flexShrink:0}}/>}
           </div>
         ))}
       </div>
       <div style={{padding:"10px 10px 14px",borderTop:`1px solid ${t.border}`,flexShrink:0}}>
-        <button onPointerDown={onLogout} style={{width:"100%",padding:"10px",borderRadius:11,background:"transparent",border:`1px solid ${t.border}`,color:t.muted,fontSize:13.5,cursor:"pointer"}}>Sign Out</button>
+        <button onPointerDown={onLogout} style={{width:"100%",padding:"10px",borderRadius:4,background:"transparent",border:`1px solid ${t.border}`,color:t.muted,fontSize:14,letterSpacing:"1.5px",textTransform:"uppercase",cursor:"pointer"}}>Sign Out</button>
       </div>
     </div>
   );
@@ -1037,42 +1054,42 @@ function AuthScreen({onAuth,onGuest,t,dark}){
     }catch(e){setErr("Cannot reach server.");}
     setBusy(false);
   };
-  const tS=id=>({flex:1,padding:"13px 0",background:"transparent",border:"none",borderBottom:`2.5px solid ${tab===id?"#4A7A2E":"transparent"}`,color:tab===id?"#4A7A2E":t.muted,fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:14,cursor:"pointer",transition:"all .2s"});
-  const inp={width:"100%",padding:"13px 15px",borderRadius:11,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:15,fontFamily:"'Times New Roman', Times, serif",marginBottom:11};
-  const bigBtn={width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,cursor:"pointer",boxShadow:"0 4px 20px rgba(74,122,46,.35)"};
+  const tS=id=>({flex:1,padding:"14px 0",background:"transparent",border:"none",borderBottom:`2px solid ${tab===id?t.gold:"transparent"}`,color:tab===id?t.text:t.muted,fontFamily:SERIF,fontWeight:600,fontSize:14,letterSpacing:"2px",textTransform:"uppercase",cursor:"pointer",transition:"all .2s"});
+  const inp={width:"100%",padding:"13px 15px",borderRadius:6,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:15,fontFamily:"'EB Garamond','Times New Roman',serif",marginBottom:11};
+  const bigBtn={width:"100%",padding:"14px",borderRadius:6,background:"linear-gradient(135deg,#7A2232,#561520)",border:`1px solid ${t.gold}`,color:"#FFFBF2",fontFamily:SERIF,fontWeight:600,fontSize:17,letterSpacing:".5px",cursor:"pointer",boxShadow:"0 6px 20px rgba(122,34,50,.28)"};
   return(
-    <div style={{height:"100%",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto",position:"relative"}}>
-      <div style={{position:"fixed",top:"-20%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:"radial-gradient(circle,rgba(74,122,46,.06),transparent 70%)",pointerEvents:"none",animation:"orb1 14s ease-in-out infinite"}}/>
-      <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(74,122,46,.04),transparent 70%)",pointerEvents:"none",animation:"orb2 18s ease-in-out infinite"}}/>
-      <div style={{width:"100%",maxWidth:440,position:"relative",zIndex:1}}>
-        <div style={{textAlign:"center",marginBottom:26}}>
-          <div style={{display:"inline-flex",width:76,height:76,borderRadius:22,background:"linear-gradient(135deg,rgba(74,122,46,.18),rgba(74,122,46,.12))",border:"2px solid rgba(74,122,46,.32)",alignItems:"center",justifyContent:"center",marginBottom:14}}>
-            <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:27,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>AI</span>
+    <div style={{height:"100%",background:t.bg,display:"flex",justifyContent:"center",padding:20,overflowY:"auto",position:"relative"}}>
+      <div style={{position:"fixed",top:"-20%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:"radial-gradient(circle,rgba(122,34,50,.06),transparent 70%)",pointerEvents:"none",animation:"orb1 14s ease-in-out infinite"}}/>
+      <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(122,34,50,.04),transparent 70%)",pointerEvents:"none",animation:"orb2 18s ease-in-out infinite"}}/>
+      <div style={{width:"100%",maxWidth:440,position:"relative",zIndex:1,margin:"auto 0"}}>
+        <div style={{textAlign:"center",marginBottom:22}}>
+          <div style={{display:"inline-flex",width:84,height:84,borderRadius:"50%",background:"linear-gradient(135deg,#7A2232,#561520)",border:`1.5px solid ${t.gold}`,boxShadow:`0 0 0 5px ${t.bg}, 0 0 0 6px ${t.gold}88, 0 12px 30px rgba(122,34,50,.25)`,alignItems:"center",justifyContent:"center",marginBottom:18}}>
+            <span style={{fontFamily:DISPLAY,fontWeight:700,fontSize:44,color:"#F3DFA8",lineHeight:1}}>A</span>
           </div>
-          <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:31,background:"linear-gradient(135deg,#4A7A2E 30%,#3A5F22 70%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:"-.5px"}}>Adelani AI Chat</div>
-          <div style={{color:t.muted,fontSize:12,marginTop:4,letterSpacing:"3px"}}>MULTI-AGENT PLATFORM</div>
+          <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:46,lineHeight:1,color:t.text,letterSpacing:".3px"}}>Adelani <span style={{color:t.gold}}>AI</span></div>
+          <div style={{color:t.gold,fontSize:15,letterSpacing:"6px",margin:"8px 0 4px"}}>— ❦ —</div>
+          <div style={{color:t.muted,fontSize:13,letterSpacing:"3px",textTransform:"uppercase"}}>Multi-Agent Platform</div>
         </div>
-        <div style={{display:"flex",gap:9,justifyContent:"center",flexWrap:"wrap",marginBottom:22}}>
+        <div style={{display:"flex",gap:"6px 14px",justifyContent:"center",flexWrap:"wrap",marginBottom:22,padding:"0 6px"}}>
           {AGENTS.map((a,i)=>(
-            <div key={a.id} style={{padding:"9px 18px",borderRadius:28,background:`${a.color}14`,border:`1.5px solid ${a.color}44`,fontSize:14.5,color:a.color,fontWeight:700,fontFamily:"'Times New Roman', Times, serif",display:"flex",alignItems:"center",gap:6,animation:`fadeUp .4s ease ${i*.06}s both`}}>
-              <span style={{fontSize:16}}>{a.icon}</span>{a.name}
-              {a.web&&<span style={{fontSize:9,background:`${a.color}22`,borderRadius:6,padding:"1px 5px",letterSpacing:"1px"}}>LIVE</span>}
+            <div key={a.id} style={{fontSize:17,color:t.text,fontFamily:DISPLAY,fontWeight:700,display:"flex",alignItems:"center",gap:6,animation:`fadeUp .4s ease ${i*.06}s both`}}>
+              <span style={{fontSize:13,color:a.color,filter:dark?"brightness(1.6)":"none"}}>{a.icon}</span>{a.name}
+              {a.web&&<span style={{fontSize:9.5,fontFamily:SERIF,color:t.gold,border:`1px solid ${t.gold}66`,borderRadius:3,padding:"0 4px",letterSpacing:"1px"}}>LIVE</span>}
             </div>
           ))}
         </div>
-        <div style={{background:t.card,borderRadius:24,border:`1px solid ${t.border}`,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.12)"}}>
+        <div style={{background:t.card,borderRadius:8,border:`1px solid ${t.border}`,borderTop:`3px solid #7A2232`,overflow:"hidden",boxShadow:dark?"0 20px 60px rgba(0,0,0,.4)":"0 20px 50px rgba(60,40,10,.10)"}}>
           <div style={{display:"flex",borderBottom:`1px solid ${t.border}`,background:t.surf}}>
             {["guest","login","premium"].map(id=>(
               <button key={id} onPointerDown={()=>{setTab(id);setErr("");}} style={tS(id)}>
-                {id==="guest"?"👤 Guest":id==="login"?"🔑 Login":"⭐ Premium"}
+                {id==="guest"?"Guest":id==="login"?"Sign In":"Premium"}
               </button>
             ))}
           </div>
           <div style={{padding:26}}>
             {tab==="guest"&&(
               <div style={{textAlign:"center"}}>
-                <Globe/>
-                <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:22,color:t.text,marginBottom:9}}>Try Adelani AI Free</div>
+                <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:30,color:t.text,margin:"4px 0 8px"}}>Try Adelani AI <em style={{color:t.gold}}>free</em></div>
                 <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Access all 7 AI agents instantly.<br/>Upload documents, images & more.</div>
                 <button onPointerDown={onGuest} style={bigBtn}>Explore as Guest →</button>
                 <div style={{color:t.muted,fontSize:13,marginTop:13}}>10 free messages per day</div>
@@ -1082,7 +1099,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
               <div>
                 <input value={u} onChange={e=>setU(e.target.value)} placeholder="Username" style={inp}/>
                 <input type="password" value={p} onChange={e=>setP(e.target.value)} placeholder="Password" onKeyDown={e=>e.key==="Enter"&&login()} style={{...inp,marginBottom:16}}/>
-                {err&&<div style={{color:"#4A7A2E",fontSize:13.5,marginBottom:12,padding:"10px 13px",borderRadius:9,background:"rgba(192,57,43,.08)",border:"1px solid rgba(192,57,43,.2)"}}>{err}</div>}
+                {err&&<div style={{color:"#7A2232",fontSize:13.5,marginBottom:12,padding:"10px 13px",borderRadius:9,background:"rgba(192,57,43,.08)",border:"1px solid rgba(192,57,43,.2)"}}>{err}</div>}
                 <button onPointerDown={!busy?login:undefined} style={{...bigBtn,opacity:busy?.6:1}}>
                   {busy?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><Spinner color="#FFF"/>Signing in...</span>:"Sign In →"}
                 </button>
@@ -1091,15 +1108,15 @@ function AuthScreen({onAuth,onGuest,t,dark}){
             {tab==="premium"&&(
               <div style={{textAlign:"center"}}>
                 <div style={{fontSize:50,marginBottom:14}}>⭐</div>
-                <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:20,color:t.text,marginBottom:9}}>Adelani Premium</div>
+                <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:20,color:t.text,marginBottom:9}}>Adelani Premium</div>
                 <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Unlimited messages · All 7 agents<br/>Priority AI · No daily limits.</div>
                 <div style={{background:"rgba(37,211,102,.07)",border:"1.5px solid rgba(37,211,102,.28)",borderRadius:15,padding:"18px",marginBottom:18,textAlign:"center"}}>
                   <div style={{fontSize:11.5,color:t.muted,letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:9}}>Contact to Upgrade</div>
-                  <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16.5,color:t.text,marginBottom:5}}>Dr. Michael Adelani Adewusi</div>
-                  <div style={{fontSize:16,color:"#4A7A2E",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
+                  <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:16.5,color:t.text,marginBottom:5}}>Dr. Michael Adelani Adewusi</div>
+                  <div style={{fontSize:16,color:"#7A2232",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
                 </div>
                 <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
-                  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15.5,textDecoration:"none"}}>
+                  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:15.5,textDecoration:"none"}}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                   Get Premium on WhatsApp →
                 </a>
@@ -1131,16 +1148,16 @@ function AdminPanel({onBack,t,dark,toggleTheme}){
       <div style={{padding:"0 16px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${t.border}`,background:t.surf,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button onPointerDown={onBack} style={{background:t.inp,border:`1px solid ${t.border}`,borderRadius:9,padding:"7px 13px",color:t.text,fontSize:13.5,cursor:"pointer"}}>← Chat</button>
-          <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Admin Panel</span>
+          <span style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#7A2232,#561520)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Admin Panel</span>
         </div>
         <button onPointerDown={toggleTheme} style={{background:t.inp,border:`1px solid ${t.border}`,borderRadius:9,width:36,height:36,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"18px 16px",maxWidth:800,margin:"0 auto",width:"100%"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
-          {[{l:"Total",v:users.length,e:"👥",c:"#4A7A2E"},{l:"Active",v:users.filter(u=>u.activated).length,e:"✅",c:"#27AE60"},{l:"Pending",v:users.filter(u=>!u.activated).length,e:"⏳",c:"#E67E22"}].map(s=>(
+          {[{l:"Total",v:users.length,e:"👥",c:"#7A2232"},{l:"Active",v:users.filter(u=>u.activated).length,e:"✅",c:"#27AE60"},{l:"Pending",v:users.filter(u=>!u.activated).length,e:"⏳",c:"#E67E22"}].map(s=>(
             <div key={s.l} style={{background:t.card,borderRadius:14,padding:"14px",border:`1px solid ${t.border}`,textAlign:"center"}}>
               <div style={{fontSize:22,marginBottom:4}}>{s.e}</div>
-              <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:26,color:s.c}}>{s.v}</div>
+              <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:26,color:s.c}}>{s.v}</div>
               <div style={{fontSize:12.5,color:t.muted}}>{s.l}</div>
             </div>
           ))}
@@ -1150,15 +1167,15 @@ function AdminPanel({onBack,t,dark,toggleTheme}){
           {!busy&&users.length===0&&<div style={{padding:36,textAlign:"center",color:t.muted}}>No registered users yet.</div>}
           {!busy&&users.map((u,i)=>(
             <div key={u.id} style={{display:"flex",alignItems:"center",gap:9,padding:"13px 15px",borderBottom:i<users.length-1?`1px solid ${t.border}`:"none",flexWrap:"wrap"}}>
-              <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(74,122,46,.16)",border:"1px solid rgba(74,122,46,.28)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Times New Roman', Times, serif",fontWeight:700,color:"#4A7A2E",fontSize:15,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
+              <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(122,34,50,.16)",border:"1px solid rgba(122,34,50,.28)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:700,color:"#7A2232",fontSize:15,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
               <div style={{flex:1,minWidth:90}}>
                 <div style={{fontWeight:600,color:t.text,fontSize:14}}>{u.username}</div>
                 <div style={{fontSize:12,color:t.muted}}>{u.email||"—"} · {u.msgCount||0} msgs</div>
               </div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                 <span style={{padding:"3px 8px",borderRadius:20,fontSize:12,fontWeight:700,background:u.activated?"rgba(39,174,96,.12)":"rgba(230,126,34,.12)",color:u.activated?"#27AE60":"#E67E22",border:`1px solid ${u.activated?"rgba(39,174,96,.28)":"rgba(230,126,34,.28)"}`}}>{u.activated?"✓ Active":"⏳ Pending"}</span>
-                {!u.activated&&<button onPointerDown={()=>act(u.username,"activate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(39,174,96,.12)",border:"1px solid rgba(39,174,96,.3)",color:"#4A7A2E",fontSize:12,fontWeight:600,cursor:"pointer"}}>Activate</button>}
-                {u.activated&&<button onPointerDown={()=>act(u.username,"deactivate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(230,126,34,.1)",border:"1px solid rgba(230,126,34,.3)",color:"#4A7A2E",fontSize:12,cursor:"pointer"}}>Revoke</button>}
+                {!u.activated&&<button onPointerDown={()=>act(u.username,"activate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(39,174,96,.12)",border:"1px solid rgba(39,174,96,.3)",color:"#7A2232",fontSize:12,fontWeight:600,cursor:"pointer"}}>Activate</button>}
+                {u.activated&&<button onPointerDown={()=>act(u.username,"deactivate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(230,126,34,.1)",border:"1px solid rgba(230,126,34,.3)",color:"#7A2232",fontSize:12,cursor:"pointer"}}>Revoke</button>}
                 <button onPointerDown={()=>act(u.username,u.banned?"unban":"ban")} style={{padding:"5px 11px",borderRadius:7,background:u.banned?"rgba(39,174,96,.1)":"rgba(192,57,43,.1)",border:`1px solid ${u.banned?"rgba(39,174,96,.3)":"rgba(192,57,43,.3)"}`,color:u.banned?"#27AE60":"#C0392B",fontSize:12,cursor:"pointer"}}>{u.banned?"Restore":"Suspend"}</button>
                 <button onPointerDown={()=>act(u.username,"delete")} style={{padding:"5px 10px",borderRadius:7,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:12,cursor:"pointer"}}>✕</button>
               </div>
@@ -1176,17 +1193,17 @@ function ReviewModal({t,dark,isRegistered,onClose,onGenerate}){
   const [c,setC]=useState({topic:"",field:"",journal:"",reviewType:"Narrative",spelling:"British English",citePct:"50",totalRefs:"40–60",wordCount:"6,000–8,000",numTables:"3",numFigures:"3",keywords:"you generate",special:"",abstractType:"Structured",audience:"scholars"});
   const up=(k,v)=>setC(p=>({...p,[k]:v}));
   const lbl={display:"block",fontSize:12,fontWeight:700,color:t.text,margin:"11px 0 4px"};
-  const inp={width:"100%",padding:"9px 11px",borderRadius:10,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontFamily:"'Times New Roman', Times, serif",fontSize:14,boxSizing:"border-box"};
+  const inp={width:"100%",padding:"9px 11px",borderRadius:10,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontFamily:"'EB Garamond','Times New Roman',serif",fontSize:14,boxSizing:"border-box"};
   const go=()=>{ if(!c.topic.trim()||!c.journal.trim())return; onGenerate(c); };
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}} onPointerDown={onClose}>
       <div onPointerDown={e=>e.stopPropagation()} style={{background:dark?"#111113":t.card,borderRadius:22,border:`1px solid ${t.border}`,maxWidth:440,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(0,0,0,.5)",animation:"popIn .3s ease"}}>
-        <div style={{background:"linear-gradient(135deg,#4A7A2E,#8B7218)",padding:"20px 22px"}}>
-          <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:19,color:"#FFF"}}>◈ Review Article Engine</div>
+        <div style={{background:"linear-gradient(135deg,#7A2232,#561520)",padding:"20px 22px"}}>
+          <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:19,color:"#FFF"}}>◈ Review Article Engine</div>
           <div style={{fontSize:12.5,color:"rgba(255,255,255,.85)",marginTop:3}}>APA 7th · Journal-ready</div>
         </div>
         <div style={{padding:"18px 22px"}}>
-          <div style={{padding:"10px 12px",borderRadius:11,marginBottom:6,background:isRegistered?"rgba(74,122,46,.09)":"rgba(139,114,24,.10)",border:`1px solid ${isRegistered?"rgba(74,122,46,.3)":"rgba(139,114,24,.32)"}`,fontSize:12.5,color:t.text,lineHeight:1.5}}>
+          <div style={{padding:"10px 12px",borderRadius:11,marginBottom:6,background:isRegistered?"rgba(122,34,50,.09)":"rgba(139,114,24,.10)",border:`1px solid ${isRegistered?"rgba(122,34,50,.3)":"rgba(139,114,24,.32)"}`,fontSize:12.5,color:t.text,lineHeight:1.5}}>
             {isRegistered?"✓ Registered access: full article — all sections, tables, figures and the complete reference list. Use Continue to extend a long paper.":"○ Free preview: title, abstract and introduction only. Log in or register for the full paper."}
           </div>
           <label style={lbl}>Topic / working title *</label>
@@ -1218,7 +1235,7 @@ function ReviewModal({t,dark,isRegistered,onClose,onGenerate}){
               <input style={inp} value={c.special} onChange={e=>up("special",e.target.value)} placeholder="e.g., PRISMA 2020, ethics statement"/>
             </div>
           )}
-          <button onPointerDown={go} style={{width:"100%",marginTop:16,padding:"13px",borderRadius:12,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 18px rgba(74,122,46,.32)"}}>
+          <button onPointerDown={go} style={{width:"100%",marginTop:16,padding:"13px",borderRadius:12,background:"linear-gradient(135deg,#7A2232,#561520)",border:"none",color:"#FFF",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 4px 18px rgba(122,34,50,.32)"}}>
             {isRegistered?"Generate full article":"Generate free preview"}
           </button>
           <button onPointerDown={onClose} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:11,background:"transparent",border:`1px solid ${t.border}`,color:t.muted,fontSize:13.5,cursor:"pointer"}}>Cancel</button>
@@ -1530,8 +1547,8 @@ If source material is provided, base the design on it. Output JSON only.`;
 
   if(view==="loading") return(
     <div style={{height:"100%",background:"#F2ECE0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14}}>
-      <div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:28,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
-      <div style={{width:32,height:32,border:"3px solid rgba(74,122,46,.2)",borderTopColor:"#4A7A2E",borderRadius:"50%",animation:"spin .9s linear infinite"}}/>
+      <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:28,background:"linear-gradient(135deg,#7A2232,#561520)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
+      <div style={{width:32,height:32,border:"3px solid rgba(122,34,50,.2)",borderTopColor:"#7A2232",borderRadius:"50%",animation:"spin .9s linear infinite"}}/>
     </div>
   );
   if(view==="auth")  return <AuthScreen onAuth={u=>{setUser(u);setGuest(false);setView("chat");}} onGuest={()=>{setGuest(true);setView("chat");}} t={t} dark={dark}/>;
@@ -1544,7 +1561,7 @@ If source material is provided, base the design on it. Output JSON only.`;
     {showReview&&<ReviewModal t={t} dark={dark} isRegistered={!!user&&!isGuest} onClose={()=>setShowReview(false)} onGenerate={genReview}/>}
     {showLimit&&<LimitModal t={t} dark={dark} onClose={()=>setShowLimit(false)}/>}
     <div style={{position:"fixed",top:"-25%",left:"-20%",width:"70%",height:"70%",borderRadius:"50%",background:`radial-gradient(circle,${agent.color}0A,transparent 70%)`,pointerEvents:"none",zIndex:0,animation:"orb1 14s ease-in-out infinite"}}/>
-    <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(74,122,46,.05),transparent 70%)",pointerEvents:"none",zIndex:0,animation:"orb2 18s ease-in-out infinite"}}/>
+    <div style={{position:"fixed",bottom:"-20%",right:"-15%",width:"55%",height:"55%",borderRadius:"50%",background:"radial-gradient(circle,rgba(122,34,50,.05),transparent 70%)",pointerEvents:"none",zIndex:0,animation:"orb2 18s ease-in-out infinite"}}/>
 
     <div style={{display:"flex",height:"100%",position:"relative",overflow:"hidden"}}>
       {!mobile&&(
@@ -1565,13 +1582,13 @@ If source material is provided, base the design on it. Output JSON only.`;
 
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0,zIndex:1}}>
         {/* Header */}
-        <div style={{height:56,padding:`0 ${mobile?"12px":"16px"}`,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${t.border}`,background:t.surf,backdropFilter:"blur(16px)",flexShrink:0,zIndex:5}}>
+        <div style={{height:62,padding:`0 ${mobile?"12px":"20px"}`,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`3px double ${t.border}`,background:t.surf,flexShrink:0,zIndex:5}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <button onPointerDown={()=>setSide(o=>!o)} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{sideOpen?(mobile?"✕":"←"):"☰"}</button>
             {mobile
-              ?<div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:800,fontSize:16,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Adelani AI</div>
-              :<><div style={{width:32,height:32,borderRadius:9,background:`${agent.color}14`,border:`1.5px solid ${agent.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:agent.color}}>{agent.icon}</div>
-                <div><div style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:700,fontSize:15,color:t.text}}>{agent.name}</div><div style={{fontSize:11.5,color:t.muted}}>{agent.role}</div></div>
+              ?<div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:22,color:t.text}}>Adelani <span style={{color:t.gold}}>AI</span></div>
+              :<><div style={{width:36,height:36,borderRadius:"50%",background:agent.color,border:`1px solid ${t.gold}`,boxShadow:`0 0 0 2px ${t.surf}, 0 0 0 3px ${agent.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:"#FFFBF2"}}>{agent.icon}</div>
+                <div><div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:22,lineHeight:1.05,color:t.text}}>{agent.name}</div><div style={{fontSize:12.5,color:t.muted,fontStyle:"italic"}}>{agent.role}</div></div>
                 {agent.web&&<span style={{padding:"2px 8px",borderRadius:20,background:`${agent.color}12`,border:`1px solid ${agent.color}26`,fontSize:9.5,color:agent.color,fontWeight:700}}>● LIVE</span>}
               </>}
           </div>
@@ -1579,7 +1596,7 @@ If source material is provided, base the design on it. Output JSON only.`;
             {!mobile&&<>{AGENTS.map(a=><button key={a.id} onPointerDown={()=>setAgent(a)} title={a.name} style={{width:30,height:30,borderRadius:8,background:agent.id===a.id?`${a.color}14`:t.inp,border:agent.id===a.id?`1.5px solid ${a.color}32`:`1px solid ${t.border}`,color:a.color,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{a.icon}</button>)}
             <div style={{width:1,height:20,background:t.border,margin:"0 2px"}}/></>}
             <button onPointerDown={toggleTheme} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>
-            {agent.id==="scholar"&&<button onPointerDown={()=>setShowReview(true)} title="Review Article Engine" style={{height:36,padding:"0 11px",borderRadius:9,background:"linear-gradient(135deg,#4A7A2E,#8B7218)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'Times New Roman', Times, serif",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>◈{mobile?"":" Review"}</button>}
+            {agent.id==="scholar"&&<button onPointerDown={()=>setShowReview(true)} title="Review Article Engine" style={{height:36,padding:"0 11px",borderRadius:9,background:"linear-gradient(135deg,#7A2232,#561520)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'EB Garamond','Times New Roman',serif",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>◈{mobile?"":" Review"}</button>}
             {agent.id==="scholar"&&lastReviewCfg&&!!user&&!isGuest&&<button onPointerDown={continueReview} title="Continue the article" style={{height:36,padding:"0 11px",borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>⏭{mobile?"":" Continue"}</button>}
             <button onPointerDown={exportChat} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:t.muted,cursor:"pointer"}}>📄</button>
             {!mobile&&<button onPointerDown={clearChat} style={{height:36,padding:"0 12px",borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:13,cursor:"pointer"}}>Clear</button>}
@@ -1590,7 +1607,7 @@ If source material is provided, base the design on it. Output JSON only.`;
         {mobile&&(
           <div style={{padding:"6px 10px",borderBottom:`1px solid ${t.border}`,background:t.surf,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <div style={{width:20,height:20,borderRadius:6,background:`${agent.color}14`,border:`1px solid ${agent.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:agent.color}}>{agent.icon}</div>
-            <span style={{fontFamily:"'Times New Roman', Times, serif",fontWeight:600,fontSize:13,color:agent.color}}>{agent.name}</span>
+            <span style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:600,fontSize:13,color:agent.color}}>{agent.name}</span>
             <span style={{fontSize:12,color:t.muted,flex:1}}>· {agent.role}</span>
             {agent.web&&<span style={{fontSize:9.5,color:agent.color,fontWeight:700}}>LIVE</span>}
             <button onPointerDown={clearChat} style={{background:"transparent",border:`1px solid ${t.border}`,borderRadius:6,padding:"3px 9px",color:t.muted,fontSize:11.5,cursor:"pointer"}}>Clear</button>
@@ -1601,10 +1618,11 @@ If source material is provided, base the design on it. Output JSON only.`;
         <div style={{flex:1,overflowY:"auto",padding:mobile?"14px 13px 8px":"20px 24px 8px",display:"flex",flexDirection:"column"}}>
           {msgs.length===0&&(
             <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"28px 18px",animation:"fadeUp .5s ease"}}>
-              <div style={{width:70,height:70,borderRadius:20,background:`${agent.color}14`,border:`2px solid ${agent.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,color:agent.color,marginBottom:18}}>{agent.icon}</div>
-              <div style={{fontFamily:"'Times New Roman', Times, serif",fontSize:mobile?21:24,fontWeight:700,color:t.text,marginBottom:7}}>Hello, I'm {agent.name}</div>
-              <div style={{fontSize:14.5,color:t.muted,maxWidth:320,lineHeight:1.65,marginBottom:10}}>{agent.role} · Powered by Adelani AI</div>
-              <div style={{fontSize:13,color:t.muted,marginBottom:20,padding:"6px 14px",borderRadius:20,background:t.inp,border:`1px solid ${t.border}`}}>
+              <div style={{width:82,height:82,borderRadius:"50%",background:agent.color,border:`1.5px solid ${t.gold}`,boxShadow:`0 0 0 5px ${t.bg}, 0 0 0 6px ${t.gold}77, 0 10px 30px ${agent.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,color:"#FFFBF2",marginBottom:22}}>{agent.icon}</div>
+              <div style={{fontFamily:DISPLAY,fontSize:mobile?32:40,fontWeight:600,lineHeight:1.1,color:t.text,marginBottom:6}}>Hello, I'm <em style={{color:agent.color}}>{agent.name}</em></div>
+              <div style={{color:t.gold,fontSize:15,letterSpacing:"6px",margin:"2px 0 8px"}}>— ❦ —</div>
+              <div style={{fontSize:16.5,color:t.muted,maxWidth:360,lineHeight:1.6,marginBottom:14,fontStyle:"italic"}}>{agent.role} · Powered by Adelani AI</div>
+              <div style={{fontSize:14,color:t.muted,marginBottom:22,padding:"6px 16px",borderRadius:4,background:t.card,border:`1px solid ${t.border}`}}>
                 📎 Supports: PDF, Word, Excel, PowerPoint, CSV, images & more
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7,justifyContent:"center",maxWidth:430}}>
@@ -1618,7 +1636,7 @@ If source material is provided, base the design on it. Output JSON only.`;
                   "Explain something complex simply",
                   "Help me think through an idea"
                 ].filter(Boolean).slice(0,4).map(p=>(
-                  <button key={p} onPointerDown={()=>{setInput(p);taRef.current?.focus();}} style={{padding:"8px 14px",borderRadius:20,background:t.inp,border:`1px solid ${agent.color}24`,color:t.muted,fontSize:13.5,cursor:"pointer"}}>{p}</button>
+                  <button key={p} onPointerDown={()=>{setInput(p);taRef.current?.focus();}} style={{padding:"9px 16px",borderRadius:4,background:t.card,border:`1px solid ${t.border}`,borderBottom:`2px solid ${agent.color}66`,color:t.text,fontSize:15,fontStyle:"italic",cursor:"pointer"}}>{p}</button>
                 ))}
               </div>
             </div>
@@ -1626,8 +1644,8 @@ If source material is provided, base the design on it. Output JSON only.`;
           {msgs.map((m,i)=><Bubble key={i} msg={m} agent={agent} t={t} dark={dark}/>)}
           {busy&&!(msgs.length&&msgs[msgs.length-1].role==="assistant"&&msgs[msgs.length-1].content)&&(
             <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:14,animation:"fadeUp .3s ease"}}>
-              <div style={{width:30,height:30,borderRadius:"50%",background:`${agent.color}14`,border:`1.5px solid ${agent.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:agent.color}}>{agent.icon}</div>
-              <div style={{background:t.bub,borderRadius:"16px 16px 16px 4px",border:`1px solid ${t.bubBrd}`}}><Dots color={agent.color}/></div>
+              <div style={{width:34,height:34,borderRadius:"50%",background:t.card,border:`1px solid ${t.gold}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:agent.color}}>{agent.icon}</div>
+              <div style={{background:t.bub,borderRadius:"3px 14px 14px 14px",border:`1px solid ${t.bubBrd}`,borderLeft:`3px solid ${agent.color}`}}><Dots color={t.gold}/></div>
             </div>
           )}
           <div ref={botRef}/>
@@ -1639,7 +1657,7 @@ If source material is provided, base the design on it. Output JSON only.`;
             {AGENTS.map(a=>(
               <button key={a.id} onPointerDown={()=>setAgent(a)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"5px 11px",borderRadius:10,background:agent.id===a.id?`${a.color}12`:"transparent",border:agent.id===a.id?`1.5px solid ${a.color}32`:"1px solid transparent",color:a.color,flexShrink:0,cursor:"pointer"}}>
                 <span style={{fontSize:15}}>{a.icon}</span>
-                <span style={{fontSize:10,fontFamily:"'Times New Roman', Times, serif",fontWeight:600,color:agent.id===a.id?a.color:t.muted,whiteSpace:"nowrap"}}>{a.name}</span>
+                <span style={{fontSize:10,fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:600,color:agent.id===a.id?a.color:t.muted,whiteSpace:"nowrap"}}>{a.name}</span>
               </button>
             ))}
           </div>
@@ -1667,7 +1685,7 @@ If source material is provided, base the design on it. Output JSON only.`;
             </div>
           )}
 
-          <div style={{display:"flex",alignItems:"flex-end",gap:7,background:t.inp,borderRadius:16,border:`1.5px solid ${input||attachment?agent.color+"48":t.border}`,padding:"8px 9px",transition:"border .2s,box-shadow .2s",boxShadow:input||attachment?`0 0 16px ${agent.color}20`:"none"}}>
+          <div style={{display:"flex",alignItems:"flex-end",gap:8,background:t.card,borderRadius:8,border:`1px solid ${input||attachment?t.gold:t.border}`,padding:"9px 10px",maxWidth:880,margin:"0 auto",transition:"border .2s,box-shadow .2s",boxShadow:input||attachment?`0 0 0 3px ${t.gold}22`:(dark?"none":"0 2px 10px rgba(60,40,10,.05)")}}>
 
             {/* Attachment button */}
             <button type="button" onPointerDown={()=>fileRef.current?.click()}
@@ -1680,14 +1698,14 @@ If source material is provided, base the design on it. Output JSON only.`;
             <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!mobile){e.preventDefault();send();}}}
               placeholder={attachment?`Ask about ${attachment.name||"the file"}...`:(agent.web?`Ask ${agent.name} to search...`:`Message ${agent.name}...`)}
-              rows={1} style={{flex:1,color:t.text,fontSize:15.5,lineHeight:1.7,fontFamily:"'Times New Roman', Times, serif",maxHeight:130,overflowY:"auto",paddingTop:3}}
+              rows={1} style={{flex:1,color:t.text,fontSize:17,lineHeight:1.6,fontFamily:"'EB Garamond','Times New Roman',serif",maxHeight:130,overflowY:"auto",paddingTop:3}}
               onInput={e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,130)+"px";}}/>
 
             {/* Send button */}
             <button type="button" onPointerDown={send}
-              style={{width:37,height:37,borderRadius:10,flexShrink:0,
-                background:`linear-gradient(135deg,${agent.color},${agent.color}BB)`,
-                border:"none",color:"#FFF",fontSize:18,
+              style={{width:38,height:38,borderRadius:"50%",flexShrink:0,
+                background:agent.color,
+                border:`1px solid ${t.gold}`,color:"#FFFBF2",fontSize:18,
                 display:"flex",alignItems:"center",justifyContent:"center",
                 cursor:"pointer",
                 opacity:(busy||(!input.trim()&&!attachment))?.4:1,
@@ -1698,8 +1716,8 @@ If source material is provided, base the design on it. Output JSON only.`;
           </div>
 
           {!mobile&&(
-            <div style={{textAlign:"center",fontSize:11,color:t.dim,marginTop:6,opacity:.65}}>
-              Adelani AI · 6 Agents · PDF · Word · Excel · PowerPoint · CSV · Images · Voice · Powered by OpenRouter
+            <div style={{textAlign:"center",fontSize:12,color:t.muted,marginTop:7,opacity:.8,fontStyle:"italic",letterSpacing:".3px"}}>
+              Adelani AI · Seven agents · PDF · Word · Excel · PowerPoint · CSV · Images · Voice
             </div>
           )}
         </div>
