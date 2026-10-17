@@ -1,16 +1,20 @@
+# LEGACY — the backend now runs on Cloudflare Workers (see README.md and worker/).
+# Kept only in case you return to Render; "plan: free" avoids paid billing.
 services:
   - type: web
     name: adelani-ai-backend
+    plan: free
     env: node
     buildCommand: npm install
     startCommand: node server.js
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
+      # Set these two in the Render dashboard — never commit their values.
       - key: ADMIN_PASSWORD
-        value: adelani2024
+        sync: false
       - key: ADMIN_SECRET
-        value: adelani-admin-2024
+        sync: false
       - key: GMAIL_USER
         sync: false
       - key: GMAIL_APP_PASSWORD

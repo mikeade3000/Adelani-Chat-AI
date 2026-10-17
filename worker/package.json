@@ -1,0 +1,15 @@
+{
+  "name": "adelani-ai-worker",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Adelani AI Chat — Backend API on Cloudflare Workers",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute adelani-users --remote --file=schema.sql",
+    "db:import": "node scripts/import-users.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.1"
+  }
+}
