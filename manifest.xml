@@ -21,7 +21,7 @@
 
   <!-- Allow calls to your backend -->
   <AppDomains>
-    <AppDomain>https://adelani-ai-backend.YOUR-SUBDOMAIN.workers.dev</AppDomain>
+    <AppDomain>https://adelani-ai-backend.mikeade3000.workers.dev</AppDomain>
     <AppDomain>https://openrouter.ai</AppDomain>
   </AppDomains>
 
