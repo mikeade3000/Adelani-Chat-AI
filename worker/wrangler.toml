@@ -18,7 +18,7 @@ FRONTEND_URL = "https://mikeade3000.github.io/Adelani-Chat-AI"
 [[d1_databases]]
 binding = "DB"
 database_name = "adelani-users"
-database_id = "PASTE-YOUR-DATABASE-ID-HERE"   # printed by: npx wrangler d1 create adelani-users
+database_id = "fbd75f25-6223-4702-8076-8b6534ca4735"
 
 [observability]
 enabled = true
