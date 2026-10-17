@@ -6,6 +6,7 @@
 <title>Adelani AI</title>
 <!-- Office.js MUST be first -->
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<script src="./config.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -219,7 +220,7 @@ textarea,input{font-family:'DM Sans',sans-serif;outline:none}
 
 <script>
 /* ══════════ CONFIG ══════════ */
-const BACKEND = "https://adelani-ai-backend.onrender.com";
+const BACKEND = window.ADELANI_BACKEND || "https://adelani-ai-backend.YOUR-SUBDOMAIN.workers.dev"; // set in config.js
 
 const AGENTS = [
   {id:"asha",   name:"Asha",   icon:"✦", color:"#D4900A",
@@ -446,12 +447,21 @@ async function sendMessage() {
       body: JSON.stringify({
         messages: apiMessages,
         systemPrompt: currentAgent.system +
-          " You are currently integrated into Microsoft " + APP_CONFIG[currentApp].name + "."
+          " You are currently integrated into Microsoft " + APP_CONFIG[currentApp].name + ".",
+        stream: true
       })
     });
-    const d = await r.json().catch(() => ({error: "Server error (HTTP " + r.status + ")."}));
-    const reply = d.reply || (d.error ? "⚠️ " + d.error : "No response.");
-    addMessage("assistant", reply);
+    let reply;
+    if ((r.headers.get("Content-Type") || "").includes("text/event-stream") && r.body) {
+      // Show the answer as it is written
+      const bubble = addMessage("assistant", "");
+      reply = await readStream(r, text => { bubble.textContent = text; scrollBottom(); });
+      messages[messages.length - 1].content = reply;
+    } else {
+      const d = await r.json().catch(() => ({error: "Server error (HTTP " + r.status + ")."}));
+      reply = d.reply || (d.error ? "⚠️ " + d.error : "No response.");
+      addMessage("assistant", reply);
+    }
     lastReply = reply;
     showInsertPanel(reply);
   } catch(e) {
@@ -459,6 +469,30 @@ async function sendMessage() {
   }
 
   setBusy(false);
+}
+
+/* Read a streamed (server-sent events) reply; onText gets the text so far. */
+async function readStream(r, onText) {
+  const reader = r.body.getReader(), dec = new TextDecoder();
+  let buf = "", text = "";
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    const lines = buf.split("\n"); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if (data === "[DONE]") continue;
+      try {
+        const j = JSON.parse(data);
+        if (j.error) text += (text ? "\n\n" : "") + "⚠️ " + (j.error.message || "The model stopped unexpectedly.");
+        else text += j.choices?.[0]?.delta?.content || "";
+      } catch {}
+    }
+    onText(text);
+  }
+  return text || "No response generated.";
 }
 
 /* ══════════ INSERT INTO DOCUMENT ══════════ */
@@ -534,6 +568,7 @@ function addMessage(role, content) {
 
   document.getElementById("messages").appendChild(div);
   scrollBottom();
+  return p;
 }
 
 function addSystemMsg(text) {

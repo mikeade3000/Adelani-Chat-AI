@@ -8,10 +8,11 @@
 <title>Adelani AI Chat</title>
 <!-- Times New Roman loaded from system — no external font needed -->
 <!-- Libraries bundled LOCALLY in ./vendor (React 18.3.1, ReactDOM 18.3.1, Babel 7.29.7).
-     No external CDN — loads reliably even on low-connectivity networks. -->
+     No external CDN — loads reliably even on low-connectivity networks.
+     Babel is only loaded when needed — see "FAST START" at the bottom of the page. -->
+<script src="./config.js"></script>
 <script src="./vendor/react.production.min.js"></script>
 <script src="./vendor/react-dom.production.min.js"></script>
-<script src="./vendor/babel.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body,#root{height:100%;overflow:hidden}
@@ -106,7 +107,7 @@ button:active{transform:scale(0.96)}
   window.__adelaniWatchdog = setTimeout(function(){
     var r = document.getElementById("root");
     if(r && r.getAttribute("data-mounted")!=="1"){
-      var babelMissing = (typeof Babel === "undefined");
+      var babelMissing = !!window.__adelaniNeedsBabel && (typeof Babel === "undefined");
       var reactMissing = (typeof React === "undefined");
       showError(
         "The app did not start within 8 seconds.",
@@ -120,11 +121,11 @@ button:active{transform:scale(0.96)}
 })();
 </script>
 
-<script type="text/babel" data-presets="react">
+<script type="text/jsx" id="app-src">
 const {useState,useEffect,useRef,useCallback} = React;
 
 /* ══════════ CONFIG ══════════ */
-const BACKEND     = "https://adelani-ai-backend.onrender.com";
+const BACKEND     = window.ADELANI_BACKEND || "https://adelani-ai-backend.YOUR-SUBDOMAIN.workers.dev"; // set in config.js
 /* Model tiers. The actual OpenRouter models (with fallbacks) are chosen by the
    backend — see MODEL_TIERS in server.js, or set CHAT_MODELS / HEAVY_MODELS /
    GRACE_MODELS / VISION_MODELS on Render to change them without a redeploy here. */
@@ -211,22 +212,70 @@ function buildReviewSystem(cfg, mode){
   return s;
 }
 
-async function chatRequest(payload){
-  const MAX_WAIT=90000, RETRY_GAP=6000, started=Date.now();
-  let reply=null, attempt=0;
+/* Ask the backend for a reply. With onDelta, the answer streams in word by word
+   (onDelta gets the text so far); without it, the full reply is returned at once.
+   Falls back to a normal JSON reply if the server doesn't stream. */
+async function streamChat(payload,onDelta){
+  const r=await fetch(BACKEND+"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,stream:!!onDelta})});
+  const ctype=r.headers.get("Content-Type")||"";
+  if(!onDelta||!ctype.includes("text/event-stream")||!r.body){
+    const d=await r.json().catch(()=>({error:"Server error (HTTP "+r.status+")."}));
+    return d.reply||(d.error?"⚠️ "+d.error:"No response.");
+  }
+  const reader=r.body.getReader(),dec=new TextDecoder();
+  let buf="",text="",last=0;
+  for(;;){
+    const {done,value}=await reader.read();
+    if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split("\n");buf=lines.pop();
+    for(const line of lines){
+      if(!line.startsWith("data: "))continue;           // skips ": OPENROUTER PROCESSING" keep-alives
+      const data=line.slice(6).trim();
+      if(data==="[DONE]")continue;
+      try{
+        const j=JSON.parse(data);
+        if(j.error){text+=(text?"\n\n":"")+"⚠️ "+(j.error.message||"The model stopped unexpectedly.");continue;}
+        text+=j.choices?.[0]?.delta?.content||"";
+      }catch{}
+    }
+    const now=Date.now();
+    if(now-last>60){last=now;onDelta(text);}           // ~16 screen updates/sec is plenty
+  }
+  onDelta(text);
+  return text||"No response generated.";
+}
+
+/* Only the recent conversation goes to the AI — fewer tokens means faster, cheaper
+   answers. Images are kept only for the latest messages; older ones become a note. */
+const MAX_HISTORY=12, MAX_CHARS_PER_MSG=12000;
+function trimHistory(msgs){
+  const recent=msgs.slice(-MAX_HISTORY);
+  return recent.map((m,i)=>{
+    const content=(m.content||"").length>MAX_CHARS_PER_MSG&&i<recent.length-1
+      ? m.content.slice(0,MAX_CHARS_PER_MSG)+"\n…[earlier text shortened]"
+      : (m.content||"");
+    if(m.image&&i>=recent.length-2){
+      return{role:m.role,content:[
+        {type:"text",text:content||"Describe this image."},
+        {type:"image_url",image_url:{url:"data:image/jpeg;base64,"+m.image,detail:"high"}}
+      ]};
+    }
+    return{role:m.role,content:m.image?content+"\n[an image was shared earlier]":content};
+  });
+}
+
+async function chatRequest(payload,onDelta){
+  const MAX_WAIT=90000, RETRY_GAP=4000, started=Date.now();
+  let reply=null;
   while(Date.now()-started<MAX_WAIT){
-    attempt++;
-    try{
-      const r=await fetch(BACKEND+"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-      const d=await r.json();
-      reply=d.reply||(d.error?"⚠️ "+d.error:"No response.");
-      break;
-    }catch(e){
+    try{ reply=await streamChat(payload,onDelta); break; }
+    catch(e){
       if(Date.now()-started+RETRY_GAP<MAX_WAIT) await new Promise(rs=>setTimeout(rs,RETRY_GAP));
       else break;
     }
   }
-  return reply||"⚠️ Service temporarily unavailable. The server may be waking up — try again in ~30s.";
+  return reply||"⚠️ Service temporarily unavailable. Please check your connection and try again.";
 }
 
 /* ══════════ FILE PROCESSING ══════════ */
@@ -1212,8 +1261,9 @@ function App(){
     if(!ls.get(WHATS_NEW_KEY)) setShowWhatsNew(true);
   },[]);
   useEffect(()=>{const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;const r=ls.get(k);if(r)setConvs(p=>({...p,[agent.id]:r}));},[agent.id,user?.id]);
-  useEffect(()=>{if(!msgs.length)return;const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,agent.id,user?.id]);
-  useEffect(()=>{botRef.current?.scrollIntoView({behavior:"smooth"});},[msgs,busy]);
+  /* Save chats — but not on every streamed word; once the reply has finished. */
+  useEffect(()=>{if(!msgs.length||busy)return;const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,busy,agent.id,user?.id]);
+  useEffect(()=>{botRef.current?.scrollIntoView({behavior:busy?"auto":"smooth"});},[msgs,busy]);
 
   const toggleTheme=()=>{const n=dark?"light":"dark";setTheme(n);ls.set("adl-theme",n);};
   const showT=m=>{setToast(m);setTimeout(()=>setToast(""),2800);};
@@ -1384,48 +1434,27 @@ If source material is provided, base the design on it. Output JSON only.`;
     if(taRef.current)taRef.current.style.height="auto";
     if(user?.role!=="admin")bumpUsage();
 
-    /* Build API messages */
-    const apiMessages=hist.map(m=>{
-      if(m.image){
-        return{role:m.role,content:[
-          {type:"text",text:m.content||"Describe this image."},
-          {type:"image_url",image_url:{url:"data:image/jpeg;base64,"+m.image,detail:"high"}}
-        ]};
-      }
-      return{role:m.role,content:m.content};
-    });
+    /* Build API messages — recent history only, for speed */
+    const apiMessages=trimHistory(hist);
 
     const ses=ls.get("adl-ses")||{};
     const payload={
       messages:apiMessages,
       systemPrompt:agent.system,
-      hasImage:hist.some(m=>m.image),
+      hasImage:apiMessages.some(m=>Array.isArray(m.content)),
       username:ses.username||null,
       sessionToken:ses.sessionToken||null
     };
 
-    const MAX_WAIT=75000,RETRY_GAP=6000,started=Date.now();
-    let reply=null,attempt=0;
-
-    while(Date.now()-started<MAX_WAIT){
-      attempt++;
-      try{
-        const r=await fetch(BACKEND+"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-        const d=await r.json();
-        reply=d.reply||(d.error?"⚠️ "+d.error:"No response.");
-        break;
-      }catch(e){
-        if(attempt===1){
-          setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:"⏳ Connecting...",timestamp:new Date().toISOString()}]}));
-        }
-        if(Date.now()-started+RETRY_GAP<MAX_WAIT) await new Promise(r=>setTimeout(r,RETRY_GAP));
-        else break;
-      }
-    }
+    /* Stream the answer in as it is written */
+    const ts=new Date().toISOString();
+    const reply=await chatRequest(payload,partial=>{
+      setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:partial,timestamp:ts}]}));
+    });
 
     setConvs(p=>({...p,[agent.id]:[
       ...hist,
-      {role:"assistant",content:reply||"⚠️ Service temporarily unavailable. Please try again.",timestamp:new Date().toISOString()}
+      {role:"assistant",content:reply,timestamp:ts}
     ]}));
     setBusy(false);
   },[input,attachment,busy,msgs,agent,user]);
@@ -1448,7 +1477,9 @@ If source material is provided, base the design on it. Output JSON only.`;
     if(user?.role!=="admin")bumpUsage();
     const ses=ls.get("adl-ses")||{};
     const sys=buildReviewSystem(cfg,isReg?"full":"preview");
-    const reply=await chatRequest({messages:[{role:"user",content:cmd}],systemPrompt:sys,maxTokens:isReg?3500:900,model:isReg?HEAVY_MODEL:undefined,username:ses.username||null,sessionToken:ses.sessionToken||null});
+    const ts=new Date().toISOString();
+    const reply=await chatRequest({messages:[{role:"user",content:cmd}],systemPrompt:sys,maxTokens:isReg?3500:900,model:isReg?HEAVY_MODEL:undefined,username:ses.username||null,sessionToken:ses.sessionToken||null},
+      partial=>setConvs(p=>({...p,scholar:[...hist,{role:"assistant",content:partial,timestamp:ts}]})));
     const fin=[...hist,{role:"assistant",content:reply,timestamp:new Date().toISOString()}];
     ls.set(key,fin.slice(-80));
     setConvs(p=>({...p,scholar:fin}));
@@ -1466,7 +1497,9 @@ If source material is provided, base the design on it. Output JSON only.`;
     if(user?.role!=="admin")bumpUsage();
     const ses=ls.get("adl-ses")||{};
     const sys=buildReviewSystem(lastReviewCfg,"full");
-    const reply=await chatRequest({messages:apiMsgs,systemPrompt:sys,maxTokens:3500,model:HEAVY_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null});
+    const ts=new Date().toISOString();
+    const reply=await chatRequest({messages:apiMsgs,systemPrompt:sys,maxTokens:3500,model:HEAVY_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null},
+      partial=>setConvs(p=>({...p,scholar:[...base,{role:"assistant",content:partial,timestamp:ts}]})));
     const fin=[...base,{role:"assistant",content:reply,timestamp:new Date().toISOString()}];
     ls.set(key,fin.slice(-80));
     setConvs(p=>({...p,scholar:fin}));
@@ -1591,7 +1624,7 @@ If source material is provided, base the design on it. Output JSON only.`;
             </div>
           )}
           {msgs.map((m,i)=><Bubble key={i} msg={m} agent={agent} t={t} dark={dark}/>)}
-          {busy&&(
+          {busy&&!(msgs.length&&msgs[msgs.length-1].role==="assistant"&&msgs[msgs.length-1].content)&&(
             <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:14,animation:"fadeUp .3s ease"}}>
               <div style={{width:30,height:30,borderRadius:"50%",background:`${agent.color}14`,border:`1.5px solid ${agent.color}28`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:agent.color}}>{agent.icon}</div>
               <div style={{background:t.bub,borderRadius:"16px 16px 16px 4px",border:`1px solid ${t.bubBrd}`}}><Dots color={agent.color}/></div>
@@ -1684,6 +1717,33 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
   var r = document.getElementById("root");
   if(r) r.setAttribute("data-mounted","1");
   if(window.__adelaniWatchdog) clearTimeout(window.__adelaniWatchdog);
+})();
+</script>
+<!-- ══════════ FAST START: compile the app once, then reuse it ══════════
+     The app above is written in JSX, which browsers can't run directly. Compiling it
+     needs Babel (3 MB). We compile once, keep the result in this browser, and only
+     download Babel again when the app code changes. Edit the code above as usual. -->
+<script>
+(function(){
+  var src=document.getElementById("app-src").textContent;
+  var h=0;for(var i=0;i<src.length;i++){h=(h*31+src.charCodeAt(i))|0;}
+  var key="adl-jsx-"+(h>>>0).toString(36)+"-"+src.length;
+  function run(code){var s=document.createElement("script");s.text=code;document.body.appendChild(s);}
+  var cached=null;
+  try{cached=localStorage.getItem(key);}catch(e){}
+  if(cached){run(cached);return;}
+  window.__adelaniNeedsBabel=true;
+  var b=document.createElement("script");
+  b.src="./vendor/babel.min.js";
+  b.onload=function(){
+    var out=Babel.transform(src,{presets:["react"]}).code;
+    try{
+      for(var k=localStorage.length-1;k>=0;k--){var n=localStorage.key(k);if(n&&n.indexOf("adl-jsx-")===0)localStorage.removeItem(n);}
+      localStorage.setItem(key,out);
+    }catch(e){}
+    run(out);
+  };
+  document.head.appendChild(b);
 })();
 </script>
 </body>

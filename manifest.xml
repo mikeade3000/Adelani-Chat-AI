@@ -8,7 +8,7 @@
 
   <!-- Unique ID for the add-in — do not change after publishing -->
   <Id>d8a3c1f2-4b7e-4a9d-8c5f-1e2b3a4d5e6f</Id>
-  <Version>1.1.0</Version>
+  <Version>1.2.0</Version>
   <ProviderName>Adelani AI</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Adelani AI"/>
@@ -21,7 +21,7 @@
 
   <!-- Allow calls to your backend -->
   <AppDomains>
-    <AppDomain>https://adelani-ai-backend.onrender.com</AppDomain>
+    <AppDomain>https://adelani-ai-backend.YOUR-SUBDOMAIN.workers.dev</AppDomain>
     <AppDomain>https://openrouter.ai</AppDomain>
   </AppDomains>
 

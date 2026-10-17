@@ -1,0 +1,24 @@
+# Cloudflare Worker config for the Adelani AI backend.
+# Deploy steps are in README.md.
+name = "adelani-ai-backend"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]   # only used to verify passwords imported from the old server
+
+[vars]
+ADMIN_EMAIL  = "mikeade3000@yahoo.com"
+FRONTEND_URL = "https://mikeade3000.github.io/Adelani-Chat-AI"
+# EMAIL_FROM = "Adelani AI <noreply@your-domain.com>"   # needs a domain verified in Resend
+# Override model fallback lists (comma-separated OpenRouter model IDs):
+# CHAT_MODELS   = "meta-llama/llama-3.1-8b-instruct,google/gemini-2.5-flash-lite"
+# HEAVY_MODELS  = "meta-llama/llama-3.3-70b-instruct,deepseek/deepseek-chat"
+# GRACE_MODELS  = "deepseek/deepseek-chat"
+# VISION_MODELS = "google/gemini-2.5-flash-lite,openai/gpt-4o-mini"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "adelani-users"
+database_id = "PASTE-YOUR-DATABASE-ID-HERE"   # printed by: npx wrangler d1 create adelani-users
+
+[observability]
+enabled = true

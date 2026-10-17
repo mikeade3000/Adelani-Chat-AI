@@ -1,6 +1,9 @@
+# LEGACY — the backend now runs on Cloudflare Workers (see README.md and worker/).
+# Kept only in case you return to Render; "plan: free" avoids paid billing.
 services:
   - type: web
     name: adelani-ai-backend
+    plan: free
     env: node
     buildCommand: npm install
     startCommand: node server.js
