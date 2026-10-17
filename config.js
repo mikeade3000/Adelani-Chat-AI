@@ -3,4 +3,4 @@
    and taskpane.html (the Office add-in).
    After `npx wrangler deploy`, paste the URL it prints here, e.g.
    "https://adelani-ai-backend.YOUR-NAME.workers.dev"  (no slash at the end). */
-window.ADELANI_BACKEND = "https://adelani-ai-backend.YOUR-SUBDOMAIN.workers.dev";
+window.ADELANI_BACKEND = "https://adelani-ai-backend.mikeade3000.workers.dev";
