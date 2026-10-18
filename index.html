@@ -769,7 +769,9 @@ async function buildDeck(spec){
     if(sd.notes) s.addNotes(String(sd.notes));
   });
 
-  const blob=await pptx.write("blob");
+  /* PptxGenJS labels its output "application/zip" (a .pptx is a zip inside), which makes
+     some browsers — phones especially — save it as .zip. Re-label it as PowerPoint. */
+  const blob=new Blob([await pptx.write("blob")],{type:"application/vnd.openxmlformats-officedocument.presentationml.presentation"});
   const filename=(String(spec.filename||spec.title||"presentation").replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-").slice(0,60)||"presentation")+".pptx";
   return {url:URL.createObjectURL(blob),filename,count:slides.length};
 }
@@ -832,6 +834,41 @@ function md(raw,accent,dark){
   t=t.replace(/\n{2,}/g,'<div class="gap"></div>');
   t=t.replace(/\n/g,"<br/>");
   return t.split(NL).join("\n");
+}
+
+/* ══════════ SAVE A GENERATED FILE ══════════
+   Downloads in place (no new tab, which made phones ignore the file name).
+   Returns false if the file is gone — files live only until the page is reloaded. */
+const MIME_EXT={"image/jpeg":".jpg","image/png":".png","image/webp":".webp"};
+async function saveFile(url,filename){
+  if(!url) return false;
+  if(!url.startsWith("blob:")){ window.open(url,"_blank","noopener"); return true; } // remote image fallback
+  let blob;
+  try{ blob=await (await fetch(url)).blob(); }catch{ return false; }
+  let name=filename||"download";
+  const ext=MIME_EXT[blob.type];
+  if(ext&&!name.toLowerCase().endsWith(ext)) name=name.replace(/\.[a-z0-9]+$/i,"")+ext;
+  const href=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=href;a.download=name;a.rel="noopener";a.style.display="none";
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(href),60000);
+  return true;
+}
+
+function SaveButton({url,filename}){
+  const [state,setState]=useState("idle"); // idle | saving | gone
+  const click=async()=>{
+    setState("saving");
+    const ok=await saveFile(url,filename);
+    setState(ok?"idle":"gone");
+  };
+  return(
+    <button onClick={click} disabled={state==="gone"} title={state==="gone"?"This file was cleared when the page reloaded. Ask Grace to make it again.":"Save to your device"}
+      style={{height:34,padding:"0 14px",borderRadius:6,background:state==="gone"?"transparent":"linear-gradient(135deg,#7A2232,#561520)",border:state==="gone"?"1px solid #C9BBA3":"1px solid #B08D3C",color:state==="gone"?"#9A8C76":"#FFFBF2",fontSize:13.5,fontWeight:600,fontFamily:SERIF,cursor:state==="gone"?"default":"pointer",whiteSpace:"nowrap"}}>
+      {state==="gone"?"Expired — ask again":state==="saving"?"Saving…":"⬇ Save"}
+    </button>
+  );
 }
 
 /* ══════════ 3D EMBLEM ══════════
@@ -1028,11 +1065,9 @@ function Bubble({msg,agent,t,dark,live}){
               <div style={{fontSize:22}}>{msg.design.kind==="image"?"🎨":"📊"}</div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:700,fontSize:14,color:t.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{msg.design.filename}</div>
-                <div style={{fontSize:11.5,color:t.muted}}>{msg.design.kind==="image"?"Graphic · PNG":"Presentation · PPTX"}</div>
+                <div style={{fontSize:11.5,color:t.muted}}>{msg.design.kind==="image"?"Graphic · image":"PowerPoint presentation · .pptx"}</div>
               </div>
-              <a href={msg.design.url} download={msg.design.filename} target="_blank" rel="noopener" style={{textDecoration:"none"}}>
-                <button style={{height:34,padding:"0 14px",borderRadius:9,background:"linear-gradient(135deg,#7A2232,#561520)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'EB Garamond','Times New Roman',serif",cursor:"pointer",whiteSpace:"nowrap"}}>⬇ Save</button>
-              </a>
+              <SaveButton url={msg.design.url} filename={msg.design.filename}/>
             </div>
           </div>
         )}
