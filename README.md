@@ -5,7 +5,7 @@ Office add-in for Word, Excel and PowerPoint.
 
 | Part | Where it runs | Cost |
 |---|---|---|
-| Chat app (`index.html`) and Office add-in (`taskpane.html`) | GitHub Pages | Free |
+| Chat app (`index.html`, `grace-studio.js`) and Office add-in (`taskpane.html`) | GitHub Pages | Free |
 | Backend (`worker/`) | Cloudflare Workers | Free plan |
 | User accounts | Cloudflare D1 database | Free plan |
 | Activation emails (optional) | Resend | Free plan |
@@ -126,6 +126,27 @@ Only if you still have the old `users.json` file:
 To make answers faster still, keep OpenRouter credit topped up (free models are
 slower and rate-limited) and keep the quick `meta-llama/llama-3.1-8b-instruct`
 model first in the chat list.
+
+## Grace Studio Pro (presentations)
+
+Grace builds real, editable PowerPoint files in the browser with `grace-studio.js`
+(no paid API). Decks get designer themes, painted gradient backgrounds, free AI
+photography (Pollinations), colour icons, native PowerPoint charts, speaker notes and
+16 layouts: title, agenda, section, features, grid, process, timeline, stat, chart,
+comparison, matrix (SWOT), image, quote, table, content and closing.
+
+Themes: `adelani`, `executive`, `aurora`, `obsidian`, `savanna`, `ocean`, `forest`,
+`royal`, `coral`, `minimal`. Ask for one by name ("…in the ocean theme") or give colours.
+
+**Daily limit:** free users (guests and accounts without Premium) can create
+**3 presentations a day** (Nigeria time). The Worker counts them in the `usage` table,
+so clearing the browser doesn't reset it. Admin and Premium accounts are unlimited.
+Graphics/images are not limited. To give someone Premium: log in as `admin` → ⚙ Admin
+Panel → **Make ⭐ Premium** next to their name. Change the number with
+`FREE_DECKS_PER_DAY` in `worker/src/index.js` (and `FREE_DECKS` in `index.html`).
+
+The Worker adds the `premium` column and `usage` table to the database by itself the
+first time it runs, so no SQL needs to be run by hand.
 
 ## Changing AI models
 Defaults are at the top of `worker/src/index.js` (`DEFAULT_TIERS`). To change them

@@ -17,11 +17,12 @@
      CHAT_MODELS / HEAVY_MODELS / GRACE_MODELS / VISION_MODELS (comma-separated)
    ══════════════════════════════════════════════════════════════════════════ */
 
-const VERSION          = "3.0.0";
+const VERSION          = "3.1.0";
 const OR_API           = "https://openrouter.ai/api/v1/chat/completions";
 const ADMIN_SESSION_MS = 12 * 3600000;     // admin sessions last 12 hours
 const USER_SESSION_MS  = 7 * 86400000;     // user sessions last 7 days
 const PBKDF2_ITERS     = 20000;            // kept modest to fit the free plan's CPU budget
+const FREE_DECKS_PER_DAY = 3;              // presentations per day for free users (premium/admin: unlimited)
 
 // ── Models ────────────────────────────────────────────────────────────────────
 // Each tier is a fallback list: if a model errors or is retired by its provider,
@@ -165,6 +166,57 @@ const regEmailHtml = (u, url) => `<!DOCTYPE html><html><head><meta charset="UTF-
   </div>
 </div></body></html>`;
 
+// ── Database upgrade (runs once per Worker instance; safe to repeat) ──────────
+let migrated = false;
+async function migrate(env) {
+  if (migrated) return;
+  try { await env.DB.prepare("ALTER TABLE users ADD COLUMN premium INTEGER DEFAULT 0").run(); } catch (e) { /* column already exists */ }
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS usage (k TEXT NOT NULL, day TEXT NOT NULL, decks INTEGER DEFAULT 0, PRIMARY KEY (k, day))").run();
+  migrated = true;
+}
+
+// ── Presentation quota ────────────────────────────────────────────────────────
+// Free users (guests and non-premium accounts) get FREE_DECKS_PER_DAY presentations
+// a day, counted on the server so clearing the browser doesn't reset it.
+const lagosDay = () => new Date(Date.now() + 3600000).toISOString().slice(0, 10); // Nigeria time (UTC+1)
+async function deckQuota(req, env, username, sessionToken) {
+  const day = lagosDay();
+  if (username === "admin" && typeof sessionToken === "string") {
+    const [exp, sig] = sessionToken.split(".");
+    if (env.ADMIN_PASSWORD && sig && Number(exp) > Date.now() && safeEqual(sig, await signAdmin(env, exp)))
+      return { unlimited: true, day };
+  }
+  let key = null;
+  if (typeof username === "string" && username && typeof sessionToken === "string" && sessionToken) {
+    const u = await getUser(env, username);
+    if (u && u.session_token === sessionToken && u.session_expiry > Date.now()) {
+      if (u.premium) return { unlimited: true, premium: true, day };
+      key = "u:" + username;
+    }
+  }
+  if (!key) key = "ip:" + (req.headers.get("CF-Connecting-IP") || req.headers.get("X-Forwarded-For") || "unknown");
+  const row = await env.DB.prepare("SELECT decks FROM usage WHERE k = ? AND day = ?").bind(key, day).first();
+  return { unlimited: false, key, day, used: row ? row.decks : 0 };
+}
+const decksLeft = q => q.unlimited ? null : Math.max(0, FREE_DECKS_PER_DAY - q.used);
+const looksLikeDeckRequest = text => /\b(slides?|deck|presentation|powerpoint|ppt|pptx|keynote|pitch)\b/i.test(text || "");
+function isDeckReply(text) {
+  try {
+    let s = String(text || "").trim().replace(/^```(json)?/i, "").replace(/```$/, "").trim();
+    const a = s.indexOf("{"), b = s.lastIndexOf("}");
+    if (a < 0 || b <= a) return false;
+    return JSON.parse(s.slice(a, b + 1)).type === "deck";
+  } catch (e) { return /"type"\s*:\s*"deck"/.test(String(text || "")); }
+}
+const limitMessage = () =>
+  `You've used your ${FREE_DECKS_PER_DAY} free presentations for today. Upgrade to Premium for unlimited presentations, or come back tomorrow.`;
+
+async function quota(req, env) {
+  const q = new URL(req.url).searchParams;
+  const info = await deckQuota(req, env, q.get("username") || "", q.get("sessionToken") || "");
+  return json({ unlimited: !!info.unlimited, premium: !!info.premium, decksLeft: decksLeft(info), limit: FREE_DECKS_PER_DAY });
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 const health = env => json({
   status: "🟢 Adelani AI Backend (Cloudflare)",
@@ -227,7 +279,7 @@ async function login(req, env) {
   const newHash = user.password.startsWith("pbkdf2$") ? user.password : await hashPassword(password);
   await env.DB.prepare("UPDATE users SET session_token = ?, session_expiry = ?, password = ? WHERE username = ?")
     .bind(sessionToken, Date.now() + USER_SESSION_MS, newHash, username).run();
-  return json({ id: user.id, username: user.username, email: user.email, role: user.role, activated: !!user.activated, sessionToken });
+  return json({ id: user.id, username: user.username, email: user.email, role: user.role, activated: !!user.activated, premium: !!user.premium, sessionToken });
 }
 
 async function activate(req, env) {
@@ -275,6 +327,14 @@ async function chat(req, env, ctx) {
   const textTier = (tier === "heavy" || tier === "grace") ? tier : "chat";
   const models = useVision ? T.vision : [...new Set([...T[textTier], ...T.chat])];
 
+  // Grace (design) requests: enforce the free presentation quota.
+  const isGrace = textTier === "grace" && !stream;
+  const q = isGrace ? await deckQuota(req, env, username, sessionToken) : null;
+  const lastUser = [...messages].reverse().find(m => m.role === "user");
+  const lastText = typeof lastUser?.content === "string" ? lastUser.content : "";
+  if (q && !q.unlimited && q.used >= FREE_DECKS_PER_DAY && looksLikeDeckRequest(lastText))
+    return json({ error: limitMessage(), code: "DECK_LIMIT", decksLeft: 0, limit: FREE_DECKS_PER_DAY }, 429);
+
   // Honor a per-request token budget, clamped for safety.
   const tokenBudget = Math.min(Math.max(parseInt(maxTokens) || 1500, 256), 4500);
 
@@ -312,7 +372,18 @@ async function chat(req, env, ctx) {
 
       const data = await r.json().catch(() => ({ error: { message: "Bad response from model." } }));
       if (data.error) { lastErr = data.error.message; console.warn(`✗ ${m}:`, lastErr); continue; }
-      return json({ reply: data.choices?.[0]?.message?.content || "No response generated.", model: m });
+      const reply = data.choices?.[0]?.message?.content || "No response generated.";
+      if (q && isDeckReply(reply)) {
+        if (!q.unlimited) {
+          if (q.used >= FREE_DECKS_PER_DAY)
+            return json({ error: limitMessage(), code: "DECK_LIMIT", decksLeft: 0, limit: FREE_DECKS_PER_DAY }, 429);
+          await env.DB.prepare("INSERT INTO usage (k, day, decks) VALUES (?, ?, 1) ON CONFLICT(k, day) DO UPDATE SET decks = decks + 1")
+            .bind(q.key, q.day).run();
+          q.used++;
+        }
+        return json({ reply, model: m, decksLeft: decksLeft(q), limit: FREE_DECKS_PER_DAY });
+      }
+      return json({ reply, model: m });
     } catch (e) {
       lastErr = e.message;
       console.warn(`✗ ${m} (network):`, lastErr);
@@ -324,11 +395,11 @@ async function chat(req, env, ctx) {
 async function adminUsers(req, env) {
   if (!(await isAdminRequest(req, env))) return json({ error: "Unauthorized" }, 403);
   const { results } = await env.DB.prepare(
-    "SELECT id, username, email, activated, banned, created_at, msg_count FROM users ORDER BY created_at DESC"
+    "SELECT id, username, email, activated, banned, premium, created_at, msg_count FROM users ORDER BY created_at DESC"
   ).all();
   return json(results.map(u => ({
     id: u.id, username: u.username, email: u.email,
-    activated: !!u.activated, banned: !!u.banned,
+    activated: !!u.activated, banned: !!u.banned, premium: !!u.premium,
     createdAt: u.created_at, msgCount: u.msg_count || 0,
   })));
 }
@@ -346,12 +417,14 @@ async function adminAction(req, env) {
     deactivate: "activated = 0",
     ban:        "banned = 1",
     unban:      "banned = 0",
+    premium:    "premium = 1",
+    unpremium:  "premium = 0",
   };
   const user = await getUser(env, username);
   if (!user) return json({ error: "User not found" }, 404);
   if (SETS[action]) await env.DB.prepare(`UPDATE users SET ${SETS[action]} WHERE username = ?`).bind(username).run();
   const u = await getUser(env, username);
-  return json({ success: true, user: { username: u.username, activated: !!u.activated, banned: !!u.banned } });
+  return json({ success: true, user: { username: u.username, activated: !!u.activated, banned: !!u.banned, premium: !!u.premium } });
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -360,6 +433,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     const { pathname } = new URL(req.url);
     try {
+      if (pathname.startsWith("/api/")) await migrate(env);
       if (req.method === "GET"  && pathname === "/")                  return health(env);
       if (req.method === "POST" && pathname === "/api/register")      return await register(req, env, ctx);
       if (req.method === "POST" && pathname === "/api/login")         return await login(req, env);
@@ -367,6 +441,7 @@ export default {
       if (req.method === "GET"  && pathname.startsWith("/api/status/"))
         return await status(env, decodeURIComponent(pathname.slice("/api/status/".length)));
       if (req.method === "POST" && pathname === "/api/chat")          return await chat(req, env, ctx);
+      if (req.method === "GET"  && pathname === "/api/quota")         return await quota(req, env);
       if (req.method === "GET"  && pathname === "/api/admin/users")   return await adminUsers(req, env);
       if (req.method === "POST" && pathname === "/api/admin/action")  return await adminAction(req, env);
       return json({ error: "Not found" }, 404);

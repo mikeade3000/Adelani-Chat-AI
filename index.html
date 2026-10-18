@@ -517,297 +517,34 @@ function parseDesignJSON(raw){
 }
 const cleanTitle = s => String(s||"").replace(/^\s*slide\s*\d+\s*[:.\-–]\s*/i,"").trim();
 
-/* ── DYNAMIC DECK RENDERER ──────────────────────────────────────────────
-   Grace designs the deck (theme, layouts, colours, images) in the JSON spec;
-   this function faithfully RENDERS whatever it designs. It is not a fixed
-   template — every visual choice can be driven by the user's instructions.
-   Supports themed layouts (title/section/content/two-column/quote/table/
-   image-full/blank) AND fully custom slides via an "elements" array. */
-const num = (v,d)=>{ const n=Number(v); return isFinite(n)?n:d; };
-const hex = c=>{ let s=String(c==null?"":c).replace(/^#/,"").trim(); return /^[0-9A-Fa-f]{6}$/.test(s)?s.toUpperCase():(/^[0-9A-Fa-f]{3}$/.test(s)?s.split("").map(x=>x+x).join("").toUpperCase():"1A1208"); };
-
-async function buildDeck(spec){
+/* Presentations are built by Grace Studio Pro (grace-studio.js), loaded on demand. */
+async function buildDeck(spec,onProgress){
   await loadScript("./vendor/pptxgen.bundle.js");
-  const P=window.PptxGenJS;
-  const pptx=new P();
-  const size=String(spec.size||"16:9").replace(/\s/g,"");
-  const W = size==="4:3"?10:13.333, H=7.5;
-  pptx.defineLayout({name:"ADL",width:W,height:H}); pptx.layout="ADL";
-
-  const lum = c=>{ const h=hex(c); return (parseInt(h.slice(0,2),16)*0.299+parseInt(h.slice(2,4),16)*0.587+parseInt(h.slice(4,6),16)*0.114); };
-  const isDark = c=> lum(c) < 140;
-  const SH={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect",rounded:"roundRect",triangle:"triangle",chevron:"chevron"};
-
-  /* ── themes: safe fonts, white/brand backgrounds (no cream), a card tint + dark cover ── */
-  const PRESETS={
-    emerald:  {mode:"light",bg:"FFFFFF",titleBg:"11261A",card:"F1F6F1",primary:"2C5F2D",accent:"C39A2B",text:"1A1A1A",muted:"5F6B60",headFont:"Cambria",bodyFont:"Calibri"},
-    executive:{mode:"light",bg:"FFFFFF",titleBg:"1E2761",card:"F1F4FB",primary:"1E2761",accent:"C9A227",text:"1B2230",muted:"5A6470",headFont:"Cambria",bodyFont:"Calibri"},
-    midnight: {mode:"dark", bg:"0B1020",titleBg:"0B1020",card:"161F38",primary:"9FC7FF",accent:"FFB020",text:"EAF2FF",muted:"9AAECB",headFont:"Calibri",bodyFont:"Calibri"},
-    coral:    {mode:"light",bg:"FFFFFF",titleBg:"2F3C7E",card:"FDF0F0",primary:"E14B54",accent:"2F3C7E",text:"27222A",muted:"6E6870",headFont:"Cambria",bodyFont:"Calibri"},
-    slate:    {mode:"light",bg:"FFFFFF",titleBg:"111827",card:"F3F5F8",primary:"1F2937",accent:"2563EB",text:"111827",muted:"6B7280",headFont:"Arial",bodyFont:"Arial"},
-    royal:    {mode:"dark", bg:"171033",titleBg:"171033",card:"241847",primary:"E6D492",accent:"B074F0",text:"F1ECFF",muted:"B3A6D2",headFont:"Cambria",bodyFont:"Calibri"},
-    teal:     {mode:"light",bg:"FFFFFF",titleBg:"02363B",card:"EAF5F3",primary:"04808C",accent:"02C39A",text:"14282A",muted:"5C6E6E",headFont:"Cambria",bodyFont:"Calibri"}
-  };
-  let th;
-  if(typeof spec.theme==="string" && PRESETS[spec.theme.toLowerCase()]) th={...PRESETS[spec.theme.toLowerCase()]};
-  else if(spec.theme && typeof spec.theme==="object") th={...PRESETS.emerald,...normalizeTheme(spec.theme)};
-  else th={...PRESETS.emerald};
-  function normalizeTheme(o){ const r={}; ["mode","headFont","bodyFont"].forEach(k=>{ if(o[k])r[k]=o[k]; });
-    if(o.font){r.headFont=o.font;r.bodyFont=o.font;} if(o.titleFont)r.headFont=o.titleFont;
-    ["bg","titleBg","primary","accent","text","muted","card"].forEach(k=>{ if(o[k])r[k]=hex(o[k]); });
-    return r; }
-  if(spec.font){ th.headFont=spec.font; th.bodyFont=spec.font; }
-  const HF=th.headFont, BF=th.bodyFont;
-  const hSize=num((spec.theme&&spec.theme.headingSize)||spec.headingSize,30);
-  const bSize=num((spec.theme&&spec.theme.bodySize)||spec.bodySize,15);
-  const darkTheme = th.mode==="dark";
-
-  /* ── pre-generate images ── */
-  const prompts=[];
-  if(spec.watermark) prompts.push(String(spec.watermark));
-  (spec.slides||[]).forEach(s=>{ if(s.background&&s.background.image) prompts.push(String(s.background.image));
-    if(s.image&&s.image.prompt) prompts.push(String(s.image.prompt));
-    (s.elements||[]).forEach(e=>{ if(e.kind==="image"&&e.prompt) prompts.push(String(e.prompt)); }); });
-  const uniq=[...new Set(prompts)].slice(0,12); const IMG={};
-  await Promise.all(uniq.map(async p=>{ try{ IMG[p]=await fetchImageDataURL(pollImageURL(p,1280,720)); }catch(e){ IMG[p]=null; } }));
-  const wm = spec.watermark?IMG[String(spec.watermark)]:null;
-  const footerTxt = spec.footer!==undefined?spec.footer:"Adelani AI Chat · Grace";
-
-  /* ── reusable design pieces ── */
-  const SHADOW={type:"outer",color:darkTheme?"000000":"9AA6B2",opacity:darkTheme?0.45:0.28,blur:9,offset:3,angle:90};
-  const ICONS=["\u2728","\u25C6","\u25B6","\u2605","\u26A1","\u270E","\u2714","\u2699","\u267B","\u2691"];
-  const softText = darkTheme?"F4F6FB":th.text;
-  const softMuted= darkTheme?th.muted:th.muted;
-
-  const pill=(s,x,y,label,onDark)=>{ if(!label)return;
-    const w=Math.min(0.42+String(label).length*0.093,7);
-    s.addShape(pptx.ShapeType.roundRect,{x,y,w,h:0.4,fill:{color:th.accent,transparency:onDark?68:80},line:{type:"none"},rectRadius:0.2});
-    s.addText(String(label).toUpperCase(),{x,y,w,h:0.4,fontFace:BF,fontSize:11,bold:true,color:onDark?"FFFFFF":th.accent,align:"center",valign:"middle",charSpacing:2}); };
-
-  const iconChip=(s,x,y,sz,icon,idx)=>{
-    s.addShape(pptx.ShapeType.roundRect,{x,y,w:sz,h:sz,fill:{color:th.accent,transparency:darkTheme?58:80},line:{type:"none"},rectRadius:0.12,shadow:darkTheme?undefined:SHADOW});
-    s.addText(icon||ICONS[idx%ICONS.length],{x,y,w:sz,h:sz,fontFace:BF,fontSize:Math.round(sz*15),color:darkTheme?"FFFFFF":th.accent,align:"center",valign:"middle",bold:true});
-  };
-
-  const heading=(s,sd,onDark)=>{
-    let y=0.55;
-    if(sd.kicker||sd.tag){ pill(s,0.7,0.6,sd.kicker||sd.tag,onDark); y=1.12; }
-    s.addText(cleanTitle(sd.title),{x:0.68,y,w:W-1.4,h:0.9,fontFace:HF,fontSize:hSize,bold:true,color:onDark?"FFFFFF":th.primary,valign:"top",lineSpacingMultiple:0.98});
-    if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.7,y:y+0.82,w:W-1.4,h:0.5,fontFace:BF,fontSize:bSize,italic:true,color:onDark?"D8DEEA":th.muted});
-    return (sd.subtitle?y+1.35:y+0.95);
-  };
-  const footer=(s,n,onDark)=>{ if(footerTxt) s.addText(String(footerTxt),{x:0.7,y:H-0.45,w:7,h:0.3,fontFace:BF,fontSize:9,color:onDark?"8FA0B5":th.muted});
-    if(n) s.addText(String(n),{x:W-1.1,y:H-0.45,w:0.6,h:0.3,fontFace:BF,fontSize:9,color:onDark?"8FA0B5":th.muted,align:"right"}); };
-  const addWM=s=>{ if(wm) s.addImage({data:wm,x:W/2-4,y:H/2-2.4,w:8,h:4.8,transparency:90}); };
-
-  const bulletList=(items,fs,color)=>(items||[]).map(b=>{
-    const t=(b&&typeof b==="object")?String(b.text||b.title||""):String(b);
-    return {text:t,options:{bullet:{code:"25CF",indent:16},fontSize:fs,color:hex(color),fontFace:BF,paraSpaceAfter:12,paraSpaceBefore:2,lineSpacingMultiple:1.08}};
-  });
-
-  const slides = Array.isArray(spec.slides)&&spec.slides.length?spec.slides:[{layout:"title",title:spec.title||"Presentation"}];
-  let page=0;
-
-  slides.forEach((sd,idx)=>{
-    const s=pptx.addSlide();
-    let layout = sd.custom||(sd.elements&&!sd.layout)?"custom":(sd.layout||(idx===0?"title":"content"));
-    if(layout==="content" && Array.isArray(sd.items) && sd.items.length) layout="features";
-
-    /* background */
-    let bg;
-    if(sd.background&&sd.background.color) bg=hex(sd.background.color);
-    else if(layout==="title"||layout==="section") bg=th.titleBg;
-    else bg=th.bg;
-    if(sd.background&&sd.background.image&&IMG[String(sd.background.image)]) s.background={data:IMG[String(sd.background.image)]};
-    else s.background={color:bg};
-    const onDark=isDark(bg);
-    const bodyC = onDark?"E8EDF5":th.text;
-    const mutedC= onDark?"AEBCCF":th.muted;
-
-    /* ═══ CUSTOM ═══ */
-    if(layout==="custom"){ addWM(s); renderElements(s,sd.elements,{W,H,BF,bodyColor:bodyC,IMG,P,SHADOW}); }
-
-    /* ═══ COVER ═══ */
-    else if(layout==="title"){
-      s.addShape(pptx.ShapeType.ellipse,{x:W-4.2,y:-2.2,w:6.4,h:6.4,fill:{color:th.accent,transparency:82},line:{type:"none"}});
-      s.addShape(pptx.ShapeType.ellipse,{x:-1.8,y:H-2.6,w:4.6,h:4.6,fill:{color:th.primary,transparency:onDark?78:88},line:{type:"none"}});
-      addWM(s);
-      pill(s,0.9,1.65,spec.kicker||sd.kicker||"PRESENTATION",true);
-      s.addText(cleanTitle(sd.title)||String(spec.title||""),{x:0.85,y:2.35,w:W-3,h:2.0,fontFace:HF,fontSize:num(sd.titleSize,48),bold:true,color:"FFFFFF",valign:"top",lineSpacingMultiple:0.98});
-      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.9,y:4.55,w:W-3.2,h:0.9,fontFace:BF,fontSize:bSize+6,color:"CFD8E6"});
-      const fac=sd.facilitator||spec.facilitator;
-      if(fac) s.addText("Facilitator: "+fac,{x:0.9,y:5.6,w:W-3,h:0.5,fontFace:BF,fontSize:bSize+2,italic:true,color:"AEBCCF"});
-      if(footerTxt) s.addText(String(footerTxt),{x:0.9,y:H-0.6,w:W-2,h:0.35,fontFace:BF,fontSize:11,color:th.accent});
-    }
-
-    /* ═══ SECTION ═══ */
-    else if(layout==="section"){
-      addWM(s); page++;
-      s.addShape(pptx.ShapeType.ellipse,{x:W-4,y:H-3.4,w:5.5,h:5.5,fill:{color:th.accent,transparency:84},line:{type:"none"}});
-      s.addText(String(sd.number||("0"+page)).slice(0,2),{x:0.85,y:0.7,w:5,h:3,fontFace:HF,fontSize:150,bold:true,color:th.accent,transparency:onDark?60:70});
-      pill(s,0.95,4.5,sd.kicker||"SECTION",true);
-      s.addText(cleanTitle(sd.title),{x:0.9,y:5.0,w:W-2,h:1.4,fontFace:HF,fontSize:38,bold:true,color:"FFFFFF"});
-      if(sd.subtitle) s.addText(String(sd.subtitle),{x:0.95,y:6.25,w:W-2,h:0.6,fontFace:BF,fontSize:bSize+2,color:"CFD8E6"});
-    }
-
-    /* ═══ FEATURES (icon rows) — the hero layout ═══ */
-    else if(layout==="features"){
-      const top=heading(s,sd,onDark); addWM(s); page++;
-      const items=(sd.items||[]).slice(0,5);
-      const n=items.length||1;
-      const areaTop=Math.max(top,1.9), areaH=H-areaTop-0.7;
-      const rowH=Math.min(areaH/n, 1.3), gap=(areaH-rowH*n)/Math.max(n-1,1);
-      items.forEach((it,i)=>{
-        const y=areaTop+i*(rowH+gap);
-        const sz=Math.min(rowH-0.15,0.95);
-        iconChip(s,0.7,y+(rowH-sz)/2,sz,it.icon,i);
-        const tx=0.7+sz+0.35;
-        s.addText(String(it.title||it.header||""),{x:tx,y:y+0.02,w:W-tx-0.7,h:0.45,fontFace:HF,fontSize:bSize+4,bold:true,color:onDark?"FFFFFF":th.primary,valign:"middle"});
-        if(it.text||it.desc) s.addText(String(it.text||it.desc),{x:tx,y:y+0.5,w:W-tx-0.7,h:rowH-0.5,fontFace:BF,fontSize:bSize-1,color:mutedC,valign:"top",lineSpacingMultiple:1.05});
-      });
-      footer(s,page,onDark);
-    }
-
-    /* ═══ GRID / CARDS ═══ */
-    else if(layout==="grid"||layout==="cards"){
-      const top=heading(s,sd,onDark); addWM(s); page++;
-      const items=(sd.items||sd.cards||[]).slice(0,6);
-      const n=items.length||1;
-      const cols = n<=2?n : (n<=4?2:3);
-      const rows = Math.ceil(n/cols);
-      const areaTop=Math.max(top,1.9), areaH=H-areaTop-0.7;
-      const gx=0.35, gy=0.35;
-      const cw=(W-1.4-(cols-1)*gx)/cols, ch=(areaH-(rows-1)*gy)/rows;
-      items.forEach((it,i)=>{
-        const r=Math.floor(i/cols), c=i%cols;
-        const x=0.7+c*(cw+gx), y=areaTop+r*(ch+gy);
-        s.addShape(pptx.ShapeType.roundRect,{x,y,w:cw,h:ch,fill:{color:onDark?th.card:th.card},line:{type:"none"},rectRadius:0.08,shadow:SHADOW});
-        const sz=0.7; iconChip(s,x+0.28,y+0.28,sz,it.icon,i);
-        s.addText(String(it.title||it.header||""),{x:x+0.28,y:y+0.28+sz+0.12,w:cw-0.56,h:0.5,fontFace:HF,fontSize:bSize+3,bold:true,color:onDark?"FFFFFF":th.primary});
-        if(it.text||it.desc) s.addText(String(it.text||it.desc),{x:x+0.28,y:y+0.28+sz+0.66,w:cw-0.56,h:ch-sz-1.1,fontFace:BF,fontSize:bSize-2,color:mutedC,valign:"top",lineSpacingMultiple:1.04});
-      });
-      footer(s,page,onDark);
-    }
-
-    /* ═══ STEPS (numbered) ═══ */
-    else if(layout==="steps"){
-      const top=heading(s,sd,onDark); addWM(s); page++;
-      const items=(sd.items||sd.steps||[]).slice(0,5); const n=items.length||1;
-      const areaTop=Math.max(top,1.9), areaH=H-areaTop-0.7;
-      const rowH=areaH/n;
-      items.forEach((it,i)=>{
-        const y=areaTop+i*rowH; const d=0.62;
-        s.addShape(pptx.ShapeType.ellipse,{x:0.7,y:y+(rowH-d)/2,w:d,h:d,fill:{color:th.accent,transparency:darkTheme?40:0},line:{type:"none"}});
-        s.addText(String(i+1),{x:0.7,y:y+(rowH-d)/2,w:d,h:d,fontFace:HF,fontSize:18,bold:true,color:"FFFFFF",align:"center",valign:"middle"});
-        const tx=0.7+d+0.35;
-        s.addText(String(it.title||it.header||""),{x:tx,y:y+0.05,w:W-tx-0.7,h:0.45,fontFace:HF,fontSize:bSize+3,bold:true,color:onDark?"FFFFFF":th.primary,valign:"middle"});
-        if(it.text||it.desc) s.addText(String(it.text||it.desc),{x:tx,y:y+0.52,w:W-tx-0.7,h:rowH-0.55,fontFace:BF,fontSize:bSize-1,color:mutedC,valign:"top"});
-      });
-      footer(s,page,onDark);
-    }
-
-    /* ═══ STAT ═══ */
-    else if(layout==="stat"||sd.stats){
-      const top=heading(s,sd,onDark); addWM(s); page++;
-      const stats=(sd.stats||[]).slice(0,4); const n=stats.length||1;
-      const gap=0.4, cw=(W-1.4-(n-1)*gap)/n; const cy=Math.max(top,2.2), chh=Math.min(3.2,H-cy-0.8);
-      stats.forEach((st,i)=>{ const x=0.7+i*(cw+gap);
-        s.addShape(pptx.ShapeType.roundRect,{x,y:cy,w:cw,h:chh,fill:{color:th.card},line:{type:"none"},rectRadius:0.08,shadow:SHADOW});
-        s.addText(String(st.value||""),{x,y:cy+0.35,w:cw,h:1.3,fontFace:HF,fontSize:48,bold:true,color:th.accent,align:"center"});
-        s.addText(String(st.label||""),{x:x+0.2,y:cy+1.7,w:cw-0.4,h:chh-1.8,fontFace:BF,fontSize:bSize-1,color:mutedC,align:"center",valign:"top"});
-      });
-      footer(s,page,onDark);
-    }
-
-    /* ═══ TWO-COLUMN ═══ */
-    else if(layout==="two-column"||sd.left||sd.right){
-      const top=heading(s,sd,onDark); addWM(s); page++;
-      const colW=(W-1.75)/2, cy=Math.max(top,1.9);
-      if(sd.leftTitle) s.addText(String(sd.leftTitle),{x:0.7,y:cy,w:colW,h:0.5,fontFace:HF,fontSize:bSize+3,bold:true,color:th.accent});
-      s.addText(bulletList(sd.left,bSize,bodyC),{x:0.7,y:sd.leftTitle?cy+0.55:cy,w:colW,h:H-cy-1,valign:"top"});
-      if(sd.rightTitle) s.addText(String(sd.rightTitle),{x:0.85+colW+0.2,y:cy,w:colW,h:0.5,fontFace:HF,fontSize:bSize+3,bold:true,color:th.accent});
-      s.addText(bulletList(sd.right,bSize,bodyC),{x:0.85+colW+0.2,y:sd.rightTitle?cy+0.55:cy,w:colW,h:H-cy-1,valign:"top"});
-      footer(s,page,onDark);
-    }
-
-    /* ═══ QUOTE ═══ */
-    else if(layout==="quote"){
-      addWM(s); page++;
-      s.addText("\u201C",{x:0.6,y:0.5,w:3,h:3,fontFace:"Georgia",fontSize:180,bold:true,color:th.accent,transparency:onDark?55:60});
-      s.addText(String(sd.quote||sd.text||""),{x:1.5,y:2.2,w:W-3,h:3,fontFace:HF,fontSize:Math.max(hSize,30),italic:true,color:onDark?"FFFFFF":th.primary,valign:"middle",lineSpacingMultiple:1.12});
-      if(sd.attribution) s.addText("— "+sd.attribution,{x:1.55,y:5.4,w:W-3,h:0.5,fontFace:BF,fontSize:bSize+1,bold:true,color:th.accent});
-      footer(s,page,onDark);
-    }
-
-    /* ═══ TABLE ═══ */
-    else if(layout==="table"||sd.table){
-      const top=heading(s,sd,onDark); addWM(s); page++;
-      const rows=(sd.table||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:BF,fontSize:bSize-1,
-        color:ri===0?"FFFFFF":th.text,bold:ri===0,fill:{color:ri===0?th.primary:(ri%2?th.card:"FFFFFF")},align:"left",valign:"middle",margin:6}})));
-      if(rows.length) s.addTable(rows,{x:0.7,y:Math.max(top,1.9),w:W-1.4,border:{type:"none"},rowH:0.5});
-      footer(s,page,onDark);
-    }
-
-    /* ═══ CONTENT (clean list, no bars) ═══ */
-    else {
-      const top=heading(s,sd,onDark); addWM(s); page++;
-      const img=sd.image&&sd.image.prompt?IMG[String(sd.image.prompt)]:null;
-      const side=sd.image&&sd.image.side==="left"?"left":"right";
-      const cy=Math.max(top,1.9);
-      if(img){ const iw=(W-1.4)*0.44, ih=H-cy-1.0; const ix=side==="right"?W-0.7-iw:0.7;
-        s.addImage({data:img,x:ix,y:cy,w:iw,h:ih,rounding:true,shadow:SHADOW});
-        const tx=side==="right"?0.7:0.7+iw+0.5, tw=W-1.4-iw-0.5;
-        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize,bodyC),{x:tx,y:cy,w:tw,h:ih,valign:"top"});
-        else if(sd.body) s.addText(String(sd.body),{x:tx,y:cy,w:tw,h:ih,fontFace:BF,fontSize:bSize,color:bodyC,valign:"top",lineSpacingMultiple:1.2});
-      } else {
-        if(sd.bullets&&sd.bullets.length) s.addText(bulletList(sd.bullets,bSize+1,bodyC),{x:0.75,y:cy,w:W-1.5,h:H-cy-0.9,valign:"top"});
-        else if(sd.body) s.addText(String(sd.body),{x:0.75,y:cy,w:W-1.5,h:H-cy-0.9,fontFace:BF,fontSize:bSize+1,color:bodyC,valign:"top",lineSpacingMultiple:1.25});
-      }
-      if(sd.elements) renderElements(s,sd.elements,{W,H,BF,bodyColor:bodyC,IMG,P,SHADOW});
-      footer(s,page,onDark);
-    }
-    if(sd.notes) s.addNotes(String(sd.notes));
-  });
-
-  /* PptxGenJS labels its output "application/zip" (a .pptx is a zip inside), which makes
-     some browsers — phones especially — save it as .zip. Re-label it as PowerPoint. */
-  const blob=new Blob([await pptx.write("blob")],{type:"application/vnd.openxmlformats-officedocument.presentationml.presentation"});
-  const filename=(String(spec.filename||spec.title||"presentation").replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-").slice(0,60)||"presentation")+".pptx";
-  return {url:URL.createObjectURL(blob),filename,count:slides.length};
+  await loadScript("./grace-studio.js?v=2.0");
+  if(!window.GraceStudio) throw new Error("Grace Studio could not load. Check that grace-studio.js was uploaded next to index.html.");
+  return window.GraceStudio.buildDeck(spec,onProgress);
 }
+const FREE_DECKS=3;
 
-/* Render freeform elements (custom slides). */
-function renderElements(s,els,ctx){
-  const {W,H,BF,bodyColor,IMG,P,SHADOW}=ctx;
-  const SH={rect:"rect",rectangle:"rect",square:"rect",ellipse:"ellipse",circle:"ellipse",oval:"ellipse",line:"line",roundrect:"roundRect",rounded:"roundRect",triangle:"triangle",chevron:"chevron"};
-  (els||[]).forEach(el=>{
-    const font=el.fontFace||BF;
+/* Grace's design request — returns the server's full JSON (reply, decksLeft, code). */
+async function designRequest(payload){
+  const MAX_WAIT=90000, started=Date.now();
+  for(;;){
     try{
-      if(el.kind==="text"){
-        s.addText(String(el.text||""),{x:num(el.x,0.5),y:num(el.y,0.5),w:num(el.w,W-1),h:num(el.h,1),
-          fontFace:font,fontSize:num(el.fontSize,18),bold:!!el.bold,italic:!!el.italic,color:hex(el.color||bodyColor),
-          align:el.align||"left",valign:el.valign||"top",charSpacing:el.charSpacing?num(el.charSpacing,0):undefined,
-          fill:el.fill?{color:hex(el.fill)}:undefined,lineSpacingMultiple:num(el.lineSpacing,1.05)});
-      } else if(el.kind==="bullets"){
-        const items=(el.items||[]).map(b=>({text:String(b),options:{bullet:el.numbered?{type:"number"}:{code:"25CF",indent:16},
-          fontSize:num(el.fontSize,15),color:hex(el.color||bodyColor),fontFace:font,paraSpaceAfter:10}}));
-        if(items.length) s.addText(items,{x:num(el.x,0.7),y:num(el.y,1.5),w:num(el.w,W-1.4),h:num(el.h,H-2.4),valign:el.valign||"top"});
-      } else if(el.kind==="shape"){
-        const st=SH[String(el.shape||"rect").toLowerCase()]||"rect";
-        s.addShape(P.ShapeType[st]||P.ShapeType.rect,{x:num(el.x,0),y:num(el.y,0),w:num(el.w,1),h:num(el.h,0.3),
-          fill:el.fill?{color:hex(el.fill),transparency:num(el.transparency,0)}:undefined,
-          line:el.lineColor?{color:hex(el.lineColor),width:num(el.lineWidth,1)}:{type:"none"},
-          rectRadius:el.radius?num(el.radius,0.1):undefined,shadow:el.shadow?SHADOW:undefined});
-      } else if(el.kind==="image"){
-        const data=el.prompt?(IMG&&IMG[String(el.prompt)]):(el.dataUrl||null);
-        if(data) s.addImage({data,x:num(el.x,1),y:num(el.y,1),w:num(el.w,4),h:num(el.h,3),transparency:num(el.transparency,0),rounding:!!el.rounding,shadow:el.shadow?SHADOW:undefined});
-      } else if(el.kind==="table"){
-        const rows=(el.rows||[]).map((r,ri)=>r.map(c=>({text:String(c),options:{fontFace:font,fontSize:num(el.fontSize,14),
-          color:ri===0?"FFFFFF":hex(el.color||bodyColor),bold:ri===0,fill:{color:ri===0?"2C5F2D":(ri%2?"F1F6F1":"FFFFFF")}}})));
-        if(rows.length) s.addTable(rows,{x:num(el.x,0.7),y:num(el.y,1.6),w:num(el.w,W-1.4),border:{type:"none"}});
-      }
-    }catch(e){}
-  });
+      const r=await fetch(BACKEND+"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      return await r.json().catch(()=>({error:"Server error (HTTP "+r.status+")."}));
+    }catch(e){
+      if(Date.now()-started+4000>MAX_WAIT) return {error:"Cannot reach the server. Please check your connection and try again."};
+      await new Promise(rs=>setTimeout(rs,4000));
+    }
+  }
+}
+async function fetchDeckQuota(ses){
+  try{
+    const q=new URLSearchParams({username:ses.username||"",sessionToken:ses.sessionToken||""});
+    const r=await fetch(BACKEND+"/api/quota?"+q);
+    return await r.json();
+  }catch{ return null; }
 }
 
 /* ══════════ MARKDOWN ══════════ */
@@ -1005,6 +742,22 @@ function WhatsNewModal({t,dark,onClose}){
   );
 }
 
+/* ══════════ PRESENTATION LIMIT MODAL ══════════ */
+function DeckLimitModal({t,dark,onClose}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeIn .2s ease"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:t.card,borderRadius:10,border:`1px solid ${t.border}`,borderTop:"3px solid #7A2232",maxWidth:400,width:"100%",padding:"28px 24px 22px",textAlign:"center",boxShadow:"0 30px 80px rgba(0,0,0,.4)",animation:"popIn .3s ease"}}>
+        <div style={{display:"inline-flex",marginBottom:14}}><Emblem icon="◭" back="G" color="#256F75" size={64} mode="flip"/></div>
+        <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:28,color:t.text,marginBottom:6}}>Daily presentations used</div>
+        <div style={{color:t.muted,fontSize:16,lineHeight:1.6,marginBottom:18}}>Free accounts can create <strong style={{color:t.text}}>{FREE_DECKS} presentations a day</strong>. Premium members get <strong style={{color:t.gold}}>unlimited</strong> studio-quality decks.</div>
+        <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"13px",borderRadius:6,background:"linear-gradient(135deg,#7A2232,#561520)",border:`1px solid ${t.gold}`,color:"#FFFBF2",fontFamily:SERIF,fontWeight:600,fontSize:16.5,textDecoration:"none",marginBottom:10}}>⭐ Get Premium on WhatsApp</a>
+        <button onClick={onClose} style={{width:"100%",padding:"11px",borderRadius:6,border:`1px solid ${t.border}`,color:t.muted,fontSize:15,background:"transparent",cursor:"pointer"}}>Maybe later</button>
+        <div style={{marginTop:12,fontSize:13,color:t.muted,fontStyle:"italic"}}>Resets every day at midnight (Nigeria time). Graphics stay available.</div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════ LIMIT MODAL ══════════ */
 function LimitModal({t,dark,onClose}){
   return(
@@ -1065,7 +818,7 @@ function Bubble({msg,agent,t,dark,live}){
               <div style={{fontSize:22}}>{msg.design.kind==="image"?"🎨":"📊"}</div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:700,fontSize:14,color:t.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{msg.design.filename}</div>
-                <div style={{fontSize:11.5,color:t.muted}}>{msg.design.kind==="image"?"Graphic · image":"PowerPoint presentation · .pptx"}</div>
+                <div style={{fontSize:11.5,color:t.muted}}>{msg.design.kind==="image"?"Graphic · image":"PowerPoint · editable .pptx"}</div>
               </div>
               <SaveButton url={msg.design.url} filename={msg.design.filename}/>
             </div>
@@ -1095,7 +848,7 @@ function Sidebar({t,dark,agent,agents,user,isGuest,onSwitch,onAdmin,onLogout}){
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:600,fontSize:14,color:t.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isGuest?"Guest User":user?.username}</div>
-            <div style={{fontSize:11,color:t.muted,marginTop:1}}>{user?.role==="admin"?"⚙ Administrator":"✦ Adelani AI"}</div>
+            <div style={{fontSize:11,color:user?.premium?t.gold:t.muted,marginTop:1}}>{user?.role==="admin"?"⚙ Administrator":user?.premium?"⭐ Premium member":"✦ Adelani AI"}</div>
           </div>
           {user?.role==="admin"&&<button onPointerDown={onAdmin} style={{padding:"3px 8px",borderRadius:7,background:"rgba(122,34,50,.12)",border:"1px solid rgba(122,34,50,.3)",color:"#7A2232",fontSize:12,fontWeight:700,cursor:"pointer"}}>⚙</button>}
         </div>
@@ -1255,6 +1008,8 @@ function AdminPanel({onBack,t,dark,toggleTheme}){
               </div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                 <span style={{padding:"3px 8px",borderRadius:20,fontSize:12,fontWeight:700,background:u.activated?"rgba(39,174,96,.12)":"rgba(230,126,34,.12)",color:u.activated?"#27AE60":"#E67E22",border:`1px solid ${u.activated?"rgba(39,174,96,.28)":"rgba(230,126,34,.28)"}`}}>{u.activated?"✓ Active":"⏳ Pending"}</span>
+                {u.premium&&<span style={{padding:"3px 8px",borderRadius:20,fontSize:12,fontWeight:700,background:"rgba(176,141,60,.14)",color:"#8A6A20",border:"1px solid rgba(176,141,60,.4)"}}>⭐ Premium</span>}
+                <button onPointerDown={()=>act(u.username,u.premium?"unpremium":"premium")} title={u.premium?"Remove Premium (back to 3 presentations a day)":"Give Premium (unlimited presentations)"} style={{padding:"5px 11px",borderRadius:7,background:u.premium?t.inp:"rgba(176,141,60,.12)",border:"1px solid rgba(176,141,60,.4)",color:"#8A6A20",fontSize:12,fontWeight:600,cursor:"pointer"}}>{u.premium?"Remove ⭐":"Make ⭐ Premium"}</button>
                 {!u.activated&&<button onPointerDown={()=>act(u.username,"activate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(39,174,96,.12)",border:"1px solid rgba(39,174,96,.3)",color:"#7A2232",fontSize:12,fontWeight:600,cursor:"pointer"}}>Activate</button>}
                 {u.activated&&<button onPointerDown={()=>act(u.username,"deactivate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(230,126,34,.1)",border:"1px solid rgba(230,126,34,.3)",color:"#7A2232",fontSize:12,cursor:"pointer"}}>Revoke</button>}
                 <button onPointerDown={()=>act(u.username,u.banned?"unban":"ban")} style={{padding:"5px 11px",borderRadius:7,background:u.banned?"rgba(39,174,96,.1)":"rgba(192,57,43,.1)",border:`1px solid ${u.banned?"rgba(39,174,96,.3)":"rgba(192,57,43,.3)"}`,color:u.banned?"#27AE60":"#C0392B",fontSize:12,cursor:"pointer"}}>{u.banned?"Restore":"Suspend"}</button>
@@ -1342,6 +1097,8 @@ function App(){
   const [showLimit,setShowLimit] = useState(false);
   const [showWhatsNew,setShowWhatsNew] = useState(false);
   const [showReview,setShowReview] = useState(false);
+  const [decksLeft,setDecksLeft] = useState(null);     // null = unlimited / unknown
+  const [showDeckLimit,setShowDeckLimit] = useState(false);
   const [lastReviewCfg,setLastReviewCfg] = useState(null);
   const [toast,setToast]         = useState("");
   const [mobile,setMobile]       = useState(window.innerWidth<720);
@@ -1363,6 +1120,7 @@ function App(){
   useEffect(()=>{if(!msgs.length||busy)return;const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,busy,agent.id,user?.id]);
   useEffect(()=>{botRef.current?.scrollIntoView({behavior:busy?"auto":"smooth"});},[msgs,busy]);
 
+  useEffect(()=>{ if(!agent.design) return; (async()=>{ const q=await fetchDeckQuota(ls.get("adl-ses")||{}); if(q) setDecksLeft(q.unlimited?null:q.decksLeft); })(); },[agent.id,user?.id]);
   const toggleTheme=()=>{const n=dark?"light":"dark";setTheme(n);ls.set("adl-theme",n);};
   const showT=m=>{setToast(m);setTimeout(()=>setToast(""),2800);};
   const logout=()=>{ls.del("adl-ses");setUser(null);setGuest(false);setConvs({});setView("auth");};
@@ -1402,86 +1160,72 @@ function App(){
     const push=(content,design)=>setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content,design,timestamp:new Date().toISOString()}]}));
     push("🎨 Designing… this can take a moment.",null);
 
-    const SYS=`You are Grace, an award-winning presentation & graphic designer inside Adelani AI Chat. Your decks look like they came from a top design studio: strong visual hierarchy, confident use of colour, generous whitespace, and a clear narrative. Decide whether the user wants a PRESENTATION or a GRAPHIC/IMAGE, then reply with ONLY valid JSON — no markdown, no backticks, no commentary.
+    const SYS=`You are Grace, the lead designer at Adelani AI's presentation studio. You produce decks that look like they came from a top consulting firm or design agency: a clear storyline, sharp copy, striking visuals and real data. Decide whether the user wants a PRESENTATION or a GRAPHIC/IMAGE, then reply with ONLY valid JSON — no markdown, no backticks, no commentary.
 
 CONTEXT — use these facts, never invent other meanings:
 • Adelani AI Chat (mikeade3000.github.io/Adelani-Chat-AI) is a multi-agent AI assistant by Dr. Michael Adelani Adewusi.
 • Its 7 agents: Asha, Scholar, Bizna, Dawa, Ubuntu, Nexus, and Grace (design). "Grace" ALWAYS means this design agent — NEVER a religious concept.
 
-DESIGN PRINCIPLES — aim for STUNNING, studio-quality decks:
-• Craft a narrative arc: bold cover → logical flow → strong close.
-• Write SHARP content: concrete and specific, never filler. Titles ≤6 words. Card text ≤14 words.
-• PREFER icon-card layouts over plain bullets. Most "points" slides should be "features", "grid", or "steps" with an icon, a bold title, and a one-line description per item. Give each item a fitting emoji "icon" (e.g. 🚀 🎯 💡 🔒 📊 🌍 ⚡ ✅). This card-and-icon motif is what makes decks look professional.
-• Create VARIETY: alternate layouts — section dividers between parts, a "stat" slide for key numbers, "quote" for emphasis, "two-column" for comparisons, occasional images. Never repeat one layout the whole deck.
-• Do NOT describe bars, stripes, or underlines — the renderer handles all styling. Just give structured content and a theme.
+HOW TO DESIGN AN OUTSTANDING DECK
+• Storyline: cover → agenda → sections that build an argument → evidence (stats, chart, timeline) → recommendation → closing. Default 10–12 slides unless the user gives a number (then EXACTLY that many).
+• Copy: titles are short insights (≤7 words), not labels — "Mobile money tripled since 2020", not "Mobile money". Card text ≤16 words. Concrete facts, numbers and examples; no filler.
+• Variety: never use the same layout twice in a row. Use at least 6 different layouts. Include a "chart" or "stat" slide when the topic has numbers (use realistic, clearly approximate figures and add "source" when known).
+• Visuals: give the cover, every section and the closing an "image" — a vivid photo description of a real scene that fits the topic (e.g. "Nigerian farmer inspecting maize at sunrise, wide shot"). Use one or two "image" split slides. Never ask for text inside images.
+• Icons: give every features/grid item a fitting emoji icon (🚀 🎯 💡 🔒 📊 🌍 ⚡ ✅ 🏥 🎓 💰 🌱).
+• Speaker notes: EVERY slide gets "notes" — 2–4 natural sentences the presenter can say.
+• Theme: pick the theme that fits the topic and audience (or follow the user's colours/fonts exactly).
 
-OBEY EXPLICIT INSTRUCTIONS EXACTLY: slide count (EXACTLY N slide objects), fonts, sizes, colours, section order, facilitator, watermark. Never prefix titles with "Slide 1:".
+OBEY EXPLICIT INSTRUCTIONS EXACTLY: slide count, theme/colours, fonts, section order, presenter name, date. Never prefix titles with "Slide 1:".
 
 DECK JSON:
-{
- "type":"deck","title":"...","kicker":"OPTIONAL small tag on cover",
- "filename":"optional","facilitator":"optional","size":"16:9",
- "footer":"optional (\"\" hides)","watermark":"optional faint image prompt",
- "theme":"emerald",   // preset NAME or custom object
- "slides":[ ...EXACTLY the requested count... ]
-}
-THEME PRESETS: "emerald" (green/gold academic), "executive" (navy/gold corporate), "midnight" (dark bold tech), "coral" (coral/navy energetic), "slate" (minimal blue accent), "royal" (dark purple/gold elegant), "teal" (teal/mint fresh). Custom: {"primary":"HEX","accent":"HEX","bg":"HEX","titleBg":"HEX","text":"HEX","font":"Calibri","headingSize":30,"bodySize":15,"mode":"light|dark"}. Hex has NO '#'. Honour any font/colour the user names.
+{"type":"deck","title":"...","kicker":"short tag","theme":"adelani","presenter":"optional","date":"optional","filename":"optional","slides":[ ... ]}
 
-SLIDE TYPES — MIX them (prefer the first three for points):
-• {"layout":"features","title":"...","kicker":"optional","items":[{"icon":"🚀","title":"Fast setup","text":"Deploy in minutes"},{"icon":"🔒","title":"Secure","text":"End-to-end encryption"}]}   // icon rows — the default for points
-• {"layout":"grid","title":"...","items":[{"icon":"🎯","title":"...","text":"..."}, ...4-6 cards]}   // icon cards in a grid
-• {"layout":"steps","title":"...","items":[{"title":"Step name","text":"detail"}, ...]}   // numbered process
-• {"layout":"title","title":"...","subtitle":"...","kicker":"...","facilitator":"..."}
-• {"layout":"section","title":"Part title","number":"01"}
-• {"layout":"stat","title":"...","stats":[{"value":"82%","label":"..."},{"value":"3x","label":"..."}]}
-• {"layout":"two-column","title":"...","leftTitle":"...","left":["..."],"rightTitle":"...","right":["..."]}
-• {"layout":"quote","quote":"...","attribution":"..."}
-• {"layout":"table","title":"...","table":[["H1","H2"],["a","b"]]}
-• {"layout":"content","title":"...","bullets":["..."],"image":{"prompt":"...","side":"right"}}   // use sparingly; prefer features
-• Fully custom: {"custom":true,"background":{"color":"0B1020"},"elements":[{"kind":"text|bullets|shape|image|table",...inches on 13.333x7.5...,"shadow":true}]}
+THEMES: "adelani" (burgundy & gold, classic), "executive" (navy & gold, corporate), "aurora" (indigo/violet/cyan, modern tech), "obsidian" (black & gold, luxury, dark), "savanna" (terracotta & amber, African, warm), "ocean" (deep blue & teal, fresh), "forest" (green & gold, nature/agriculture/health), "royal" (purple & gold, elegant, dark), "coral" (rose & navy, energetic), "minimal" (black/white/blue, clean). Custom: {"primary":"HEX","accent":"HEX","c1":"HEX","c2":"HEX","font":"Georgia"} (c1/c2 = cover gradient).
 
-EXAMPLE (emulate this quality — adapt to the real topic):
-{"type":"deck","title":"Unlocking Adelani AI Chat","kicker":"PRODUCT GUIDE","theme":"executive","slides":[
- {"layout":"title","title":"Unlocking Adelani AI Chat","subtitle":"Your multi-agent AI assistant","kicker":"PRODUCT GUIDE"},
- {"layout":"section","title":"Meet the Agents","number":"01"},
- {"layout":"grid","title":"Seven specialised agents","items":[
-   {"icon":"💬","title":"Asha","text":"Everyday assistant"},
-   {"icon":"🎓","title":"Scholar","text":"Research & study"},
-   {"icon":"💼","title":"Bizna","text":"Business & productivity"},
-   {"icon":"🎨","title":"Grace","text":"Slides & graphics"}]},
- {"layout":"features","title":"Why teams love it","items":[
-   {"icon":"⚡","title":"Fast","text":"Answers in seconds"},
-   {"icon":"🌍","title":"Works offline","text":"Built for low-connectivity"},
-   {"icon":"🔒","title":"Private","text":"Your data stays yours"}]},
- {"layout":"steps","title":"Get started in 3 steps","items":[
-   {"title":"Pick an agent","text":"Choose the right specialist"},
-   {"title":"Ask or upload","text":"Type a prompt or drop a file"},
-   {"title":"Download","text":"Save your result"}]},
- {"layout":"quote","quote":"The best AI is the one that gets out of your way.","attribution":"Adelani AI"}
-]}
+LAYOUTS (every slide may also have "notes"):
+• {"layout":"title","title":"...","subtitle":"...","kicker":"...","presenter":"...","date":"...","image":"photo description"}
+• {"layout":"agenda","title":"Agenda","items":[{"title":"...","text":"optional"}, ...3-6]}
+• {"layout":"section","number":"01","title":"...","subtitle":"...","image":"photo description"}
+• {"layout":"features","title":"...","kicker":"optional","items":[{"icon":"🚀","title":"...","text":"..."}, ...3-5]}
+• {"layout":"grid","title":"...","items":[{"icon":"🎯","title":"...","text":"..."}, ...3-6]}
+• {"layout":"process","title":"...","items":[{"title":"...","text":"..."}, ...3-5]}
+• {"layout":"timeline","title":"...","items":[{"date":"2020","title":"...","text":"..."}, ...3-6]}
+• {"layout":"stat","title":"...","stats":[{"value":"82%","label":"...","text":"optional"}, ...2-4],"source":"optional"}
+• {"layout":"chart","title":"...","chart":{"type":"bar|line|pie|doughnut","labels":["2021","2022"],"series":[{"name":"...","values":[10,20]}]},"insights":["...", ...2-3],"source":"optional"}
+• {"layout":"comparison","title":"...","left":{"title":"...","points":["..."]},"right":{"title":"...","points":["..."]}}
+• {"layout":"matrix","title":"SWOT analysis","items":[{"title":"Strengths","points":["..."]},{"title":"Weaknesses","points":["..."]},{"title":"Opportunities","points":["..."]},{"title":"Threats","points":["..."]}]}
+• {"layout":"image","title":"...","bullets":["..."],"image":"photo description","side":"right|left"}
+• {"layout":"quote","quote":"...","attribution":"...","image":"photo description"}
+• {"layout":"table","title":"...","table":[["Header","Header"],["cell","cell"]]}
+• {"layout":"content","title":"...","bullets":["..."]}   // use rarely
+• {"layout":"closing","title":"Thank you","subtitle":"call to action","contact":"optional","image":"photo description"}
 
 GRAPHIC JSON: {"type":"image","prompt":"rich detailed prompt","width":1024,"height":1024,"caption":"..."}
 
-If source material is provided, base the design on it. Output JSON only.`;
+If source material is provided, build the deck from it. Output JSON only.`;
 
     const ses=ls.get("adl-ses")||{};
-    let reply=null;
-    /* Try Grace's upgraded model; fall back to the known-good model on any failure. */
-    try{ reply=await chatRequest({messages:[{role:"user",content:userText+source}],systemPrompt:SYS,maxTokens:4500,model:GRACE_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null}); }catch(e){ reply=null; }
-    if(!reply || /^⚠️/.test(reply) || reply.length<40){
-      try{ reply=await chatRequest({messages:[{role:"user",content:userText+source}],systemPrompt:SYS,maxTokens:4200,model:HEAVY_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null}); }catch(e){}
+    const d=await designRequest({messages:[{role:"user",content:userText+source}],systemPrompt:SYS,maxTokens:4500,model:GRACE_MODEL,username:ses.username||null,sessionToken:ses.sessionToken||null});
+    if(typeof d.decksLeft==="number") setDecksLeft(d.decksLeft);
+    if(d.code==="DECK_LIMIT"){
+      setDecksLeft(0);
+      push("🔒 "+(d.error||"You've used your free presentations for today.")+"\n\nGraphics are still available, and your limit resets tomorrow.",null);
+      setShowDeckLimit(true); setBusy(false); return;
     }
+    const reply=d.reply||(d.error?"⚠️ "+d.error:"");
 
     let spec=null;
     try{ spec=parseDesignJSON(reply); }catch(e){ spec=null; }
     if(!spec||!spec.type){
-      push("⚠️ I couldn't structure that design. Try describing it differently — e.g. \"Make a 6-slide deck on climate-smart agriculture\" or \"Design a poster for our graduation event\".",null);
+      push(reply&&/^⚠️/.test(reply)?reply:"⚠️ I couldn't structure that design. Try describing it differently — e.g. \"Make a 10-slide deck on climate-smart agriculture\" or \"Design a poster for our graduation event\".",null);
       setBusy(false); return;
     }
     try{
       if(spec.type==="deck"){
-        const {url,filename,count}=await buildDeck(spec);
-        push("✅ Your presentation \""+(spec.title||"Untitled")+"\" is ready — "+count+" slides. Tap Save to download the .pptx.",{kind:"pptx",url,filename});
+        const res=await buildDeck(spec,msg=>push("🎨 "+msg,null));
+        const left=typeof d.decksLeft==="number"?d.decksLeft:null;
+        const note=left===null?"":(left>0?`\n\n*${left} of ${FREE_DECKS} free presentations left today.*`:`\n\n*That was your last free presentation today — Premium gives you unlimited.*`);
+        push("✅ **\""+(spec.title||"Untitled")+"\"** is ready — "+res.count+" slides in the "+res.theme+" theme, with speaker notes. Tap **Save** to download your PowerPoint."+note,{kind:"pptx",url:res.url,filename:res.filename,preview:res.preview});
       } else if(spec.type==="image"){
         const gen=pollImageURL(spec.prompt,spec.width,spec.height);
         const preview=await fetchImageObjectURL(gen);
@@ -1638,6 +1382,7 @@ If source material is provided, base the design on it. Output JSON only.`;
   return(
     <>
     <style>{`body,#root{background:${t.bg}} .md code{background:${dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.06)"}} .md pre{background:${dark?"#0F0F11":"#EDE8DF"};border:1px solid ${t.border}} .md .h1,.md .h2,.md .h3{color:${t.text}} textarea::placeholder,input::placeholder{color:${t.dim}}`}</style>
+    {showDeckLimit&&<DeckLimitModal t={t} dark={dark} onClose={()=>setShowDeckLimit(false)}/>}
     {showWhatsNew&&<WhatsNewModal t={t} dark={dark} onClose={()=>{ls.set(WHATS_NEW_KEY,true);setShowWhatsNew(false);}}/>}
     {showReview&&<ReviewModal t={t} dark={dark} isRegistered={!!user&&!isGuest} onClose={()=>setShowReview(false)} onGenerate={genReview}/>}
     {showLimit&&<LimitModal t={t} dark={dark} onClose={()=>setShowLimit(false)}/>}
@@ -1706,6 +1451,9 @@ If source material is provided, base the design on it. Output JSON only.`;
               <div style={{fontSize:14,color:t.muted,marginBottom:22,padding:"6px 16px",borderRadius:4,background:t.card,border:`1px solid ${t.border}`}}>
                 📎 Supports: PDF, Word, Excel, PowerPoint, CSV, images & more
               </div>
+              {agent.design&&<div style={{fontSize:14.5,color:t.text,marginTop:-10,marginBottom:20,padding:"7px 16px",borderRadius:4,background:t.card,border:`1px solid ${t.gold}66`}}>
+                ✦ Grace Studio Pro · {decksLeft===null?"Unlimited presentations":`${decksLeft} of ${FREE_DECKS} free presentations left today`}
+              </div>}
               <div style={{display:"flex",flexWrap:"wrap",gap:7,justifyContent:"center",maxWidth:430}}>
                 {[
                   agent.id==="asha"?"What can you help me with?":null,
@@ -1714,6 +1462,8 @@ If source material is provided, base the design on it. Output JSON only.`;
                   agent.id==="dawa"?"Daily habits for better health":null,
                   agent.id==="ubuntu"?"Teach me a Yoruba proverb":null,
                   agent.id==="nexus"?"What's trending in AI today?":null,
+                  agent.design?"A 10-slide pitch deck for an agritech startup":null,
+                  agent.design?"Presentation on renewable energy in Africa with charts":null,
                   "Explain something complex simply",
                   "Help me think through an idea"
                 ].filter(Boolean).slice(0,4).map(p=>(
