@@ -41,6 +41,18 @@ button:active{transform:scale(0.96)}
 @keyframes popIn  {from{opacity:0;transform:scale(.9) translateY(16px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes orb1   {0%,100%{transform:translate(0,0)}50%{transform:translate(30px,-20px)}}
 @keyframes orb2   {0%,100%{transform:translate(0,0)}50%{transform:translate(-30px,20px)}}
+/* ── Ade, the voice assistant ── */
+@keyframes adeBlink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.08)}}
+@keyframes adeTalk {0%,100%{transform:scaleY(.35)}25%{transform:scaleY(1.15)}50%{transform:scaleY(.6)}75%{transform:scaleY(1)}}
+@keyframes adeFloat{0%,100%{translate:0 0}50%{translate:0 -4px}}
+@keyframes adeRing {0%{transform:scale(1);opacity:.7}100%{transform:scale(1.55);opacity:0}}
+@keyframes adeIn   {from{opacity:0;transform:translateY(24px) scale(.9)}to{opacity:1;transform:none}}
+.ade-eyes{transform-origin:60px 52px;animation:adeBlink 5s infinite;transition:translate .35s ease}
+.ade-look .ade-eyes{translate:4px 3px}
+.ade-mouth{transform-origin:60px 70px;transform:scaleY(.35);transition:transform .2s}
+.ade-speaking .ade-mouth{animation:adeTalk .32s ease-in-out infinite}
+.ade-ring{position:absolute;inset:-6px;border-radius:50%;border:2px solid #D9B86A;animation:adeRing 1.4s ease-out infinite;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.ade-eyes,.ade-speaking .ade-mouth,.ade-ring,.ade-float{animation:none!important}}
 /* ── 3D emblem coins ── */
 @keyframes embFlip {0%,30%{transform:rotateY(0deg)}50%,80%{transform:rotateY(180deg)}100%{transform:rotateY(360deg)}}
 @keyframes embSway {0%,100%{transform:rotateY(-30deg) rotateX(10deg)}50%{transform:rotateY(30deg) rotateX(-8deg)}}
@@ -204,7 +216,7 @@ const AGENTS=[
   {id:"ubuntu", name:"Ubuntu", icon:"◉",role:"African Languages & Culture", color:"#A4512A",
    system:"You are Ubuntu. Expert in African languages, cultures, histories, and philosophies. Analyse any shared documents or images with cultural sensitivity."},
   {id:"nexus",  name:"Nexus",  icon:"⊕",role:"Live Web Research",           color:"#5E4388",web:true,
-   system:"You are Nexus, Adelani AI Chat's live research agent. Search the internet in real time. Synthesize results into clear responses and cite sources. Analyse any shared files too."},
+   system:"You are Nexus, Adelani AI Chat's live research agent. You receive fresh web search results with each question. Base your answer on them, prefer the most recent information, give dates for news, and cite sources inline as markdown links like [BBC](https://...). If the results don't answer the question, say so honestly. Analyse any shared files too."},
   {id:"studio", name:"Grace" , icon:"◭",role:"Design · Slides & Graphics",  color:"#256F75",design:true,
    system:"You are Grace, Adelani AI Chat's design agent. You create PowerPoint presentations and graphics, and can redesign uploaded slides, PDFs or images. Be visual, structured and creative."}
 ];
@@ -252,11 +264,18 @@ function buildReviewSystem(cfg, mode){
 /* Ask the backend for a reply. With onDelta, the answer streams in word by word
    (onDelta gets the text so far); without it, the full reply is returned at once.
    Falls back to a normal JSON reply if the server doesn't stream. */
-async function streamChat(payload,onDelta){
+async function streamChat(payload,onDelta,meta){
   const r=await fetch(BACKEND+"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,stream:!!onDelta})});
   const ctype=r.headers.get("Content-Type")||"";
+  if(meta){
+    const left=r.headers.get("X-Searches-Left"); if(left!==null&&left!=="") meta.searchesLeft=Number(left);
+    const sr=r.headers.get("X-Search"); if(sr) meta.search=sr;
+    meta.sources=meta.sources||[];
+  }
+  const addSource=(url,title)=>{ if(!meta||!url||meta.sources.some(x=>x.url===url)) return; meta.sources.push({url,title:title||""}); };
   if(!onDelta||!ctype.includes("text/event-stream")||!r.body){
     const d=await r.json().catch(()=>({error:"Server error (HTTP "+r.status+")."}));
+    if(meta){ if(d.code) meta.code=d.code; if(typeof d.searchesLeft==="number") meta.searchesLeft=d.searchesLeft; (d.citations||[]).forEach(c=>addSource(c.url,c.title)); }
     return d.reply||(d.error?"⚠️ "+d.error:"No response.");
   }
   const reader=r.body.getReader(),dec=new TextDecoder();
@@ -273,13 +292,19 @@ async function streamChat(payload,onDelta){
       try{
         const j=JSON.parse(data);
         if(j.error){text+=(text?"\n\n":"")+"⚠️ "+(j.error.message||"The model stopped unexpectedly.");continue;}
-        text+=j.choices?.[0]?.delta?.content||"";
+        const ch=j.choices?.[0]||{};
+        text+=ch.delta?.content||"";
+        [...(ch.delta?.annotations||[]),...(ch.message?.annotations||[])].forEach(a=>{ if(a&&a.type==="url_citation"&&a.url_citation) addSource(a.url_citation.url,a.url_citation.title); });
       }catch{}
     }
     const now=Date.now();
     if(now-last>60){last=now;onDelta(text);}           // ~16 screen updates/sec is plenty
   }
   onDelta(text);
+  if(meta){ // also collect links the model wrote into the answer itself
+    const re=/\[([^\]]{1,120})\]\((https?:\/\/[^\s)]+)\)/g; let m;
+    while((m=re.exec(text))) addSource(m[2],m[1]);
+  }
   return text||"No response generated.";
 }
 
@@ -302,11 +327,11 @@ function trimHistory(msgs){
   });
 }
 
-async function chatRequest(payload,onDelta){
+async function chatRequest(payload,onDelta,meta){
   const MAX_WAIT=90000, RETRY_GAP=4000, started=Date.now();
   let reply=null;
   while(Date.now()-started<MAX_WAIT){
-    try{ reply=await streamChat(payload,onDelta); break; }
+    try{ reply=await streamChat(payload,onDelta,meta); break; }
     catch(e){
       if(Date.now()-started+RETRY_GAP<MAX_WAIT) await new Promise(rs=>setTimeout(rs,RETRY_GAP));
       else break;
@@ -524,7 +549,7 @@ async function buildDeck(spec,onProgress){
   if(!window.GraceStudio) throw new Error("Grace Studio could not load. Check that grace-studio.js was uploaded next to index.html.");
   return window.GraceStudio.buildDeck(spec,onProgress);
 }
-const FREE_DECKS=3;
+const FREE_DECKS=3, FREE_SEARCHES=5;
 
 /* Grace's design request — returns the server's full JSON (reply, decksLeft, code). */
 async function designRequest(payload){
@@ -605,6 +630,279 @@ function SaveButton({url,filename}){
       style={{height:34,padding:"0 14px",borderRadius:6,background:state==="gone"?"transparent":"linear-gradient(135deg,#7A2232,#561520)",border:state==="gone"?"1px solid #C9BBA3":"1px solid #B08D3C",color:state==="gone"?"#9A8C76":"#FFFBF2",fontSize:13.5,fontWeight:600,fontFamily:SERIF,cursor:state==="gone"?"default":"pointer",whiteSpace:"nowrap"}}>
       {state==="gone"?"Expired — ask again":state==="saving"?"Saving…":"⬇ Save"}
     </button>
+  );
+}
+
+/* ══════════ ADE — VOICE ASSISTANT ══════════
+   Speaks answers aloud with the clearest voice the device offers, takes voice
+   commands (switch agent, open links, save files, repeat, stop…), listens for a
+   follow-up after it speaks, and gently offers help while the user types.
+   Uses the browser's own speech engines — free, nothing sent to our server. */
+const SR_API = typeof window!=="undefined" ? (window.SpeechRecognition||window.webkitSpeechRecognition) : null;
+const VOICE_RANK=[/abeo/i,/andrew.*(online|natural)/i,/guy.*(online|natural)/i,/christopher.*(online|natural)/i,/ryan.*(online|natural)/i,/brian.*(online|natural)/i,/(online|natural)/i,/google uk english male/i,/daniel/i,/aaron/i,/arthur/i,/google us english/i,/alex/i,/male/i];
+function rankVoices(voices){
+  const en=voices.filter(v=>/^en[-_]/i.test(v.lang)||/^en$/i.test(v.lang));
+  const score=v=>{ const i=VOICE_RANK.findIndex(r=>r.test(v.name)); return (i<0?100:i)+(v.localService?0.5:0); };
+  return en.sort((a,b)=>score(a)-score(b));
+}
+function speakable(md){
+  return String(md||"")
+    .replace(/```[\s\S]*?```/g," (I've left the code on your screen.) ")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g,"$1")
+    .replace(/https?:\/\/\S+/g,"")
+    .replace(/[*_`#>|]/g,"")
+    .replace(/^\s*[-•❧]\s+/gm,"")
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu,"")
+    .replace(/\s*\n+\s*/g,". ").replace(/\.\s*\./g,".").replace(/\s{2,}/g," ").trim();
+}
+function sentences(text,max){
+  const out=[]; let cur="";
+  (text.match(/[^.!?]+[.!?]*\s*/g)||[text]).forEach(p=>{ if((cur+p).length>max&&cur){out.push(cur.trim());cur=p;} else cur+=p; });
+  if(cur.trim()) out.push(cur.trim());
+  return out;
+}
+const ORDINALS={first:1,one:1,"1":1,second:2,two:2,"2":2,third:3,three:3,"3":3,fourth:4,four:4,"4":4,fifth:5,five:5,"5":5,sixth:6,six:6,"6":6,seventh:7,seven:7,"7":7,eighth:8,eight:8,"8":8};
+const AGENT_WORDS={asha:"asha",scholar:"scholar",bizna:"bizna",business:"bizna",dawa:"dawa",health:"dawa",ubuntu:"ubuntu",nexus:"nexus",search:"nexus",grace:"studio",design:"studio"};
+
+function AdeFace({speaking,looking,size}){
+  return(
+    <svg viewBox="0 0 120 120" width={size} height={size} className={(speaking?"ade-speaking ":"")+(looking?"ade-look":"")} style={{display:"block",borderRadius:"50%"}}>
+      <defs>
+        <radialGradient id="adeBg" cx="35%" cy="25%" r="80%"><stop offset="0" stopColor="#9B2F42"/><stop offset="1" stopColor="#3D0E18"/></radialGradient>
+        <linearGradient id="adeSkin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#9A6544"/><stop offset="1" stopColor="#7A4A2E"/></linearGradient>
+      </defs>
+      <circle cx="60" cy="60" r="60" fill="url(#adeBg)"/>
+      <path d="M14 120 C18 93 38 84 60 84 C82 84 102 93 106 120 Z" fill="#1F2A44"/>
+      <path d="M38 92 L52 86 L60 104 Z M82 92 L68 86 L60 104 Z" fill="#162037"/>
+      <path d="M50 86 L60 103 L70 86 Z" fill="#F5F1E8"/>
+      <path d="M58 89 L62 89 L64 104 L60 110 L56 104 Z" fill="#B08D3C"/>
+      <rect x="52" y="70" width="16" height="17" rx="6" fill="#7A4A2E"/>
+      <ellipse cx="38.5" cy="55" rx="3.5" ry="6" fill="#86553A"/><ellipse cx="81.5" cy="55" rx="3.5" ry="6" fill="#86553A"/>
+      <ellipse cx="60" cy="52" rx="21.5" ry="25" fill="url(#adeSkin)"/>
+      <path d="M38.5 50 C38 31 49 26 60 26 C72 26 82.5 31 81.5 50 C79 41 73 35.5 60 35.5 C47 35.5 41 41 38.5 50 Z" fill="#1E1A17"/>
+      <path d="M38.6 49 C38.4 44 39.5 40 41.5 37.5 L42.5 46 Z M81.4 49 C81.6 44 80.5 40 78.5 37.5 L77.5 46 Z" fill="#A9A39C"/>
+      <path d="M45 66 C48 76 54 79 60 79 C66 79 72 76 75 66 C72 71 66 73.5 60 73.5 C54 73.5 48 71 45 66 Z" fill="#3A3330" opacity=".85"/>
+      <path d="M53 66.5 C56 65 64 65 67 66.5 C64 67.6 56 67.6 53 66.5 Z" fill="#3A3330"/>
+      <g className="ade-eyes">
+        <ellipse cx="51" cy="52" rx="2.6" ry="2.9" fill="#1A120C"/><ellipse cx="69" cy="52" rx="2.6" ry="2.9" fill="#1A120C"/>
+        <circle cx="51.9" cy="51.1" r=".8" fill="#fff"/><circle cx="69.9" cy="51.1" r=".8" fill="#fff"/>
+      </g>
+      <path d="M45 46.5 Q51 44 56.5 46.3 M63.5 46.3 Q69 44 75 46.5" stroke="#1E1A17" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+      <rect x="43.5" y="47" width="15" height="11" rx="4" fill="rgba(255,255,255,.08)" stroke="#D9B86A" strokeWidth="1.4"/>
+      <rect x="61.5" y="47" width="15" height="11" rx="4" fill="rgba(255,255,255,.08)" stroke="#D9B86A" strokeWidth="1.4"/>
+      <path d="M58.5 51 Q60 49.6 61.5 51" stroke="#D9B86A" strokeWidth="1.4" fill="none"/>
+      <path d="M57 61 Q60 63 63 61" stroke="#5E3A26" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+      <g className="ade-mouth"><path d="M54.5 69 Q60 73.5 65.5 69 Q60 71 54.5 69 Z" fill="#5A2018" stroke="#5A2018" strokeWidth="1.2" strokeLinejoin="round"/></g>
+    </svg>
+  );
+}
+
+function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,apiRef,voiceRef}){
+  const supported=typeof window!=="undefined"&&"speechSynthesis" in window;
+  const [pref,setPref]=useState(()=>ls.get("adl-voice"));             // "on" | "off" | null (not asked yet)
+  const [open,setOpen]=useState(false);                               // card visible
+  const [caption,setCaption]=useState("");
+  const [speaking,setSpeaking]=useState(false);
+  const [listening,setListening]=useState(false);
+  const [heard,setHeard]=useState("");
+  const [looking,setLooking]=useState(false);
+  const [pendingLink,setPendingLink]=useState(null);
+  const [showSettings,setShowSettings]=useState(false);
+  const [voices,setVoices]=useState([]);
+  const [settings,setSettings]=useState(()=>({voice:"",rate:0.95,handsFree:true,...(ls.get("adl-voice-settings")||{})}));
+  const st=useRef({last:"",links:[],awaiting:null,offeredTyping:false,rec:null,greeted:false,prevAgent:agent.id});
+  const name=isGuest?"":(user?.username||"");
+
+  useEffect(()=>{ if(!supported) return; const load=()=>setVoices(rankVoices(window.speechSynthesis.getVoices())); load(); window.speechSynthesis.addEventListener("voiceschanged",load); return()=>window.speechSynthesis.removeEventListener("voiceschanged",load); },[]);
+  const voice=voices.find(v=>v.name===settings.voice)||voices[0]||null;
+  const saveSettings=n=>{ const v={...settings,...n}; setSettings(v); ls.set("adl-voice-settings",v); };
+  const setVoicePref=v=>{ setPref(v); ls.set("adl-voice",v); };
+
+  /* ── speaking ── */
+  const stopSpeaking=()=>{ try{window.speechSynthesis.cancel();}catch{} setSpeaking(false); };
+  const say=(text,then)=>{
+    setCaption(text); setOpen(true);
+    if(!supported){ then&&then(); return; }
+    stopListening(); stopSpeaking();
+    const parts=sentences(speakable(text),200);
+    if(!parts.length){ then&&then(); return; }
+    st.current.last=text;
+    parts.forEach((part,i)=>{
+      const u=new SpeechSynthesisUtterance(part);
+      const list=voices.length?voices:rankVoices(window.speechSynthesis.getVoices()); // voices may not be in state yet
+      const vc=list.find(v=>v.name===settings.voice)||list[0]||null;
+      if(vc){ u.voice=vc; u.lang=vc.lang; } else u.lang="en-GB";
+      u.rate=settings.rate; u.pitch=0.92;
+      if(i===0) u.onstart=()=>setSpeaking(true);
+      if(i===parts.length-1){ u.onend=()=>{ setSpeaking(false); then&&then(); }; u.onerror=()=>setSpeaking(false); }
+      window.speechSynthesis.speak(u);
+    });
+  };
+
+  /* ── listening ── */
+  function stopListening(){ try{st.current.rec&&st.current.rec.abort();}catch{} st.current.rec=null; setListening(false); }
+  const listen=(opts={})=>{
+    if(!SR_API){ setCaption("Voice commands need Chrome, Edge or Safari. I can still read answers aloud for you."); setOpen(true); return; }
+    stopSpeaking(); stopListening();
+    const rec=new SR_API();
+    rec.lang=(navigator.language||"en-GB").toLowerCase().startsWith("en")?navigator.language:"en-GB";
+    rec.interimResults=true; rec.maxAlternatives=1; rec.continuous=false;
+    let finalText="";
+    rec.onresult=e=>{ let txt=""; for(let i=0;i<e.results.length;i++){ txt+=e.results[i][0].transcript; if(e.results[i].isFinal) finalText=txt; } setHeard(txt); };
+    rec.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed") setCaption("I need permission to use your microphone. Please allow it in your browser, then tap my microphone again."); };
+    rec.onend=()=>{ setListening(false); st.current.rec=null; const txt=(finalText||"").trim(); setHeard(""); if(txt) handle(txt); else if(opts.quiet!==true&&st.current.awaiting){ st.current.awaiting=null; } };
+    st.current.rec=rec; setListening(true); setOpen(true);
+    try{ rec.start(); }catch{ setListening(false); }
+  };
+  const ask=(text,yes,no)=>{ st.current.awaiting={yes,no}; say(text,()=>{ if(SR_API&&pref==="on") listen({quiet:true}); }); };
+  const followUp=()=>{ if(SR_API&&pref==="on"&&settings.handsFree) listen({quiet:true}); };
+
+  /* ── links ── */
+  const openLink=(link)=>{
+    if(!link) return;
+    const w=window.open(link.url,"_blank");
+    if(w){ try{w.opener=null;}catch{} say("Opening "+(link.title||"the link")+" in a new tab."); setPendingLink(null); }
+    else { setPendingLink(link); say("Your browser needs one tap from you to open it. Please tap the Open button on my card."); }
+  };
+
+  /* ── commands ── */
+  const handle=(raw)=>{
+    const text=raw.trim(), s=text.toLowerCase().replace(/[.,!?]/g,"").trim();
+    const api=apiRef.current||{};
+    if(st.current.awaiting){
+      const a=st.current.awaiting;
+      if(/^(yes|yeah|yep|sure|ok|okay|please|go ahead|do it|of course|yes please)\b/.test(s)){ st.current.awaiting=null; a.yes&&a.yes(); return; }
+      if(/^(no|nope|not now|no thanks|cancel|later)\b/.test(s)){ st.current.awaiting=null; a.no?a.no():say("No problem."); return; }
+      st.current.awaiting=null;
+    }
+    if(/^(stop|quiet|be quiet|silence|pause|that's enough|enough)$/.test(s)){ stopSpeaking(); setCaption("I've stopped. Tap my microphone whenever you need me."); return; }
+    if(/(turn off|switch off|disable|stop using|stop the) (the )?voice/.test(s)){ setVoicePref("off"); say("Voice assistance is off. Tap me anytime to turn it back on."); return; }
+    if(/(repeat|say (that|it) again|read (that|it) again|come again|pardon)/.test(s)){ say(st.current.lastSpokenReply||st.current.last||"I haven't said anything yet."); return; }
+    if(/(what can you do|help me with voice|voice commands|what can i say)/.test(s)){
+      say("Here's what you can say. Ask any question and I'll send it to the current agent. Say 'switch to Scholar' or any agent's name. Say 'open the first source' or 'open the link'. Say 'save the presentation'. Say 'read that again', 'stop', 'clear the chat', 'dark mode', or 'turn off voice'.",followUp); return; }
+    const sw=s.match(/\b(?:switch|talk|go|change|take me|move|open|connect me)\s+(?:over\s+)?(?:to\s+)?(?:the\s+)?(asha|scholar|bizna|business|dawa|health|ubuntu|nexus|search|grace|design)\b/);
+    if(sw){ api.switchTo&&api.switchTo(AGENT_WORDS[sw[1]]); return; }
+    const lk=s.match(/\b(?:open|click|visit|show|go to)\s+(?:the\s+)?(?:(first|second|third|fourth|fifth|sixth|seventh|eighth|last|\d)\s+)?(?:link|source|website|site|result|article)(?:\s+(?:number\s+)?(one|two|three|four|five|six|seven|eight|\d))?/);
+    if(lk||/^(open it|click it|open that)$/.test(s)){
+      const links=st.current.links;
+      if(!links.length){ say("There isn't a link in the latest answer. Ask Nexus to search the web and I can open the sources for you."); return; }
+      let n=1; const w=lk&&(lk[1]||lk[2]);
+      if(w==="last") n=links.length; else if(w) n=ORDINALS[w]||1;
+      if(n>links.length){ say(`There ${links.length===1?"is only one link":"are only "+links.length+" links"}.`); return; }
+      openLink(links[n-1]); return;
+    }
+    if(/\b(save|download)\b/.test(s)&&/\b(presentation|slides?|deck|powerpoint|file|it|image|graphic|picture)\b/.test(s)){
+      if(api.saveLast&&api.saveLast()) say("Saving it to your device now."); else say("I don't have a file to save yet. Ask Grace to design a presentation first."); return; }
+    if(/\bdark mode\b/.test(s)){ api.setTheme&&api.setTheme("dark"); say("Dark mode is on."); return; }
+    if(/\blight mode\b/.test(s)){ api.setTheme&&api.setTheme("light"); say("Light mode is on."); return; }
+    if(/\b(clear|new|start a new|start over)\b.*\b(chat|conversation)\b/.test(s)){ api.clear&&api.clear(); say("Done — we're starting fresh."); return; }
+    if(/^(read (it|the answer|that)|what did (it|you) say)$/.test(s)){ say(st.current.lastReply||"There's no answer to read yet."); return; }
+    const ty=text.match(/^(?:type|write)\s+(.+)/i);
+    if(ty){ api.setInput&&api.setInput(ty[1]); say("I've typed that for you. Say 'send' when you're ready."); return; }
+    if(/^(send|send it|send message|submit)$/.test(s)){ if(api.sendInput&&api.sendInput()) setCaption("Sent."); else say("The message box is empty."); return; }
+    if(/^(thank you|thanks|thank you ade|thanks ade)$/.test(s)){ say("You're very welcome. I'm right here if you need me."); return; }
+    // Anything else is a question for the current agent.
+    setCaption("“"+text+"”"); api.sendText&&api.sendText(text);
+  };
+
+  /* ── hooks the app calls ── */
+  voiceRef.current={
+    onReply:({agent:ag,text,sources})=>{
+      const links=(sources&&sources.length)?sources:[...String(text).matchAll(/\[([^\]]{1,120})\]\((https?:\/\/[^\s)]+)\)/g)].map(m=>({title:m[1],url:m[2]}));
+      st.current.links=links; st.current.lastReply=text;
+      if(pref!=="on") return;
+      let spoken=speakable(text); let more=false;
+      if(spoken.length>650){ const cut=spoken.slice(0,650); spoken=cut.slice(0,Math.max(cut.lastIndexOf(". "),300)+1); more=true; }
+      let tail=more?" I've put the full answer on your screen.":"";
+      if(sources&&sources.length) tail+=` I found ${sources.length} source${sources.length>1?"s":""}. Just say 'open the first source' if you'd like to read more.`;
+      else if(links.length) tail+=" There's a link in my answer — say 'open the link' and I'll open it.";
+      st.current.lastSpokenReply=spoken+tail;
+      say(spoken+tail,followUp);
+    },
+    onDesign:({kind,title,count})=>{
+      if(pref!=="on") return;
+      if(kind==="pptx") ask(`Your presentation, ${title}, is ready with ${count} slides. Shall I save it to your device?`,()=>{ const api=apiRef.current||{}; if(api.saveLast&&api.saveLast()) say("Saved. You'll find it in your downloads."); });
+      else ask("Your graphic is ready. Shall I save it for you?",()=>{ const api=apiRef.current||{}; api.saveLast&&api.saveLast(); say("Saved to your downloads."); });
+    },
+  };
+
+  /* greeting after sign-in */
+  useEffect(()=>{
+    if(!entered||st.current.greeted) return; st.current.greeted=true;
+    const hello=`Welcome${name?", "+name:""}! I'm Ade, your Adelani AI voice assistant.`;
+    if(pref===null){ setOpen(true); say(hello+" Would you like me to assist you by voice? I can read answers aloud, take your voice commands, and even open links for you."); }
+    else if(pref==="on") say(hello+" I'm ready when you are — tap my microphone and just speak.");
+  },[entered]);
+
+  /* introduce each agent when the user switches */
+  useEffect(()=>{
+    if(st.current.prevAgent===agent.id) return; st.current.prevAgent=agent.id;
+    st.current.links=[];
+    if(pref==="on") say(`You're now with ${agent.name}, your ${agent.role.toLowerCase().replace(/\s*[·&]\s*/g," and ")} specialist. What would you like to ask?`,followUp);
+  },[agent.id]);
+
+  /* follow the user while they type: glance at the box, and offer voice once */
+  useEffect(()=>{
+    if(!inputFocused) return;
+    setLooking(true); const tm=setTimeout(()=>setLooking(false),1600);
+    if(pref==="on"&&SR_API&&!st.current.offeredTyping&&!speaking){ st.current.offeredTyping=true; setCaption("I see you're typing — you can also just speak to me. Tap the microphone anytime."); setOpen(true); }
+    return()=>clearTimeout(tm);
+  },[inputFocused]);
+
+  useEffect(()=>()=>{ stopSpeaking(); stopListening(); },[]);
+
+  if(!supported) return null;
+  const size=mobile?58:72;
+  const pos={position:"fixed",right:mobile?12:22,bottom:mobile?148:112,zIndex:60};
+  const btn={padding:"8px 14px",borderRadius:6,fontFamily:SERIF,fontSize:15,cursor:"pointer"};
+  const primary={...btn,background:"linear-gradient(135deg,#7A2232,#561520)",border:`1px solid ${t.gold}`,color:"#FFFBF2",fontWeight:600};
+  const ghost={...btn,background:"transparent",border:`1px solid ${t.border}`,color:t.muted};
+
+  return(
+    <div style={pos}>
+      {open&&(
+        <div style={{position:"absolute",right:size+12,bottom:4,width:mobile?"min(78vw,300px)":320,background:t.card,border:`1px solid ${t.border}`,borderTop:"3px solid #7A2232",borderRadius:8,padding:"12px 14px",boxShadow:dark?"0 12px 30px rgba(0,0,0,.5)":"0 12px 30px rgba(60,40,10,.16)",animation:"adeIn .3s ease"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <span style={{fontFamily:DISPLAY,fontWeight:700,fontSize:19,color:t.text}}>Ade</span>
+            <span style={{fontSize:12,color:t.muted,fontStyle:"italic",flex:1}}>{listening?"listening…":speaking?"speaking…":"voice assistant"}</span>
+            <button title="Voice settings" onClick={()=>setShowSettings(v=>!v)} style={{fontSize:15,color:t.muted,padding:2}}>⚙</button>
+            <button title="Close" onClick={()=>{setOpen(false);stopSpeaking();}} style={{fontSize:15,color:t.muted,padding:2}}>✕</button>
+          </div>
+          <div style={{fontSize:15.5,lineHeight:1.55,color:t.text,maxHeight:150,overflowY:"auto"}}>{heard?<em style={{color:t.muted}}>“{heard}”</em>:(caption.length>260?caption.slice(0,260)+"…":caption)||"Tap my microphone and speak."}</div>
+          {pendingLink&&<a href={pendingLink.url} target="_blank" rel="noopener noreferrer" onClick={()=>setPendingLink(null)} style={{...primary,display:"block",textAlign:"center",textDecoration:"none",marginTop:10}}>Open {pendingLink.title?("“"+pendingLink.title.slice(0,40)+"”"):"link"} ↗</a>}
+          {pref===null&&<div style={{display:"flex",gap:8,marginTop:12}}>
+            <button style={primary} onClick={()=>{ setVoicePref("on"); say("Wonderful! I'll read answers aloud and listen for your commands. Go ahead — ask me anything.",()=>{ if(SR_API) listen({quiet:true}); }); }}>Yes, use voice</button>
+            <button style={ghost} onClick={()=>{ setVoicePref("off"); say("No problem. I'll stay quiet — tap me whenever you'd like voice help."); setTimeout(()=>setOpen(false),4000); }}>No thanks</button>
+          </div>}
+          {pref==="off"&&<button style={{...primary,marginTop:12,width:"100%"}} onClick={()=>{ setVoicePref("on"); say("Voice assistance is on. How can I help?",()=>{ if(SR_API) listen({quiet:true}); }); }}>Turn on voice assistance</button>}
+          {showSettings&&(
+            <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${t.border}`,display:"flex",flexDirection:"column",gap:9,fontSize:14,color:t.text}}>
+              <label>Voice
+                <select value={voice?voice.name:""} onChange={e=>saveSettings({voice:e.target.value})} style={{width:"100%",marginTop:4,padding:6,borderRadius:4,border:`1px solid ${t.border}`,background:t.inp,color:t.text,fontFamily:SERIF}}>
+                  {voices.map(v=><option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+                </select>
+              </label>
+              <label>Speaking speed: {settings.rate.toFixed(2)}×
+                <input type="range" min="0.75" max="1.25" step="0.05" value={settings.rate} onChange={e=>saveSettings({rate:Number(e.target.value)})} style={{width:"100%"}}/>
+              </label>
+              <label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" checked={settings.handsFree} onChange={e=>saveSettings({handsFree:e.target.checked})}/> Listen for my reply after Ade speaks</label>
+              <button style={ghost} onClick={()=>say("Hello! This is how I sound. I'm here to help you get the most out of Adelani AI.")}>▶ Test voice</button>
+              {pref==="on"&&<button style={ghost} onClick={()=>{ stopSpeaking(); setVoicePref("off"); setCaption("Voice assistance is off."); }}>Turn off voice assistance</button>}
+            </div>
+          )}
+        </div>
+      )}
+      <div style={{position:"relative",width:size,height:size}} className="ade-float">
+        {(listening||speaking)&&<span className="ade-ring" style={{borderColor:listening?"#4ADE80":"#D9B86A"}}/>}
+        <button aria-label="Ade voice assistant" title={pref==="on"?"Tap to speak to Ade":"Ade — voice assistant"}
+          onClick={()=>{ if(speaking){ stopSpeaking(); return; } if(listening){ stopListening(); return; } if(pref==="on") listen(); else setOpen(o=>!o); }}
+          style={{width:size,height:size,borderRadius:"50%",padding:0,border:`2px solid ${t.gold}`,boxShadow:`0 0 0 3px ${t.bg}, 0 10px 24px rgba(0,0,0,.3)`,background:"transparent",opacity:pref==="off"&&!open?0.75:1}}>
+          <AdeFace speaking={speaking} looking={looking} size={size-4}/>
+        </button>
+        <button aria-label={listening?"Stop listening":"Speak"} onClick={()=>{ if(listening) stopListening(); else { if(pref!=="on") setVoicePref("on"); listen(); } }}
+          style={{position:"absolute",right:-4,bottom:-4,width:mobile?24:28,height:mobile?24:28,borderRadius:"50%",background:listening?"#2F6E50":"#7A2232",border:`1.5px solid ${t.gold}`,color:"#FFFBF2",fontSize:mobile?12:14,display:"flex",alignItems:"center",justifyContent:"center"}}>{listening?"■":"🎙"}</button>
+      </div>
+    </div>
   );
 }
 
@@ -743,16 +1041,19 @@ function WhatsNewModal({t,dark,onClose}){
 }
 
 /* ══════════ PRESENTATION LIMIT MODAL ══════════ */
-function DeckLimitModal({t,dark,onClose}){
+function DeckLimitModal({t,dark,onClose,kind}){
+  const search=kind==="search";
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeIn .2s ease"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={{background:t.card,borderRadius:10,border:`1px solid ${t.border}`,borderTop:"3px solid #7A2232",maxWidth:400,width:"100%",padding:"28px 24px 22px",textAlign:"center",boxShadow:"0 30px 80px rgba(0,0,0,.4)",animation:"popIn .3s ease"}}>
-        <div style={{display:"inline-flex",marginBottom:14}}><Emblem icon="◭" back="G" color="#256F75" size={64} mode="flip"/></div>
-        <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:28,color:t.text,marginBottom:6}}>Daily presentations used</div>
-        <div style={{color:t.muted,fontSize:16,lineHeight:1.6,marginBottom:18}}>Free accounts can create <strong style={{color:t.text}}>{FREE_DECKS} presentations a day</strong>. Premium members get <strong style={{color:t.gold}}>unlimited</strong> studio-quality decks.</div>
+        <div style={{display:"inline-flex",marginBottom:14}}>{search?<Emblem icon="⊕" back="N" color="#5E4388" size={64} mode="flip"/>:<Emblem icon="◭" back="G" color="#256F75" size={64} mode="flip"/>}</div>
+        <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:28,color:t.text,marginBottom:6}}>{search?"Daily live searches used":"Daily presentations used"}</div>
+        <div style={{color:t.muted,fontSize:16,lineHeight:1.6,marginBottom:18}}>{search
+          ?<>Free accounts get <strong style={{color:t.text}}>{FREE_SEARCHES} live web searches a day</strong> with Nexus. Premium members get <strong style={{color:t.gold}}>unlimited</strong> searches.</>
+          :<>Free accounts can create <strong style={{color:t.text}}>{FREE_DECKS} presentations a day</strong>. Premium members get <strong style={{color:t.gold}}>unlimited</strong> studio-quality decks.</>}</div>
         <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"13px",borderRadius:6,background:"linear-gradient(135deg,#7A2232,#561520)",border:`1px solid ${t.gold}`,color:"#FFFBF2",fontFamily:SERIF,fontWeight:600,fontSize:16.5,textDecoration:"none",marginBottom:10}}>⭐ Get Premium on WhatsApp</a>
         <button onClick={onClose} style={{width:"100%",padding:"11px",borderRadius:6,border:`1px solid ${t.border}`,color:t.muted,fontSize:15,background:"transparent",cursor:"pointer"}}>Maybe later</button>
-        <div style={{marginTop:12,fontSize:13,color:t.muted,fontStyle:"italic"}}>Resets every day at midnight (Nigeria time). Graphics stay available.</div>
+        <div style={{marginTop:12,fontSize:13,color:t.muted,fontStyle:"italic"}}>{search?"Resets every day at midnight (Nigeria time). The other agents stay available.":"Resets every day at midnight (Nigeria time). Graphics stay available."}</div>
       </div>
     </div>
   );
@@ -810,6 +1111,22 @@ function Bubble({msg,agent,t,dark,live}){
             {u?msg.content:undefined}
           </div>
         )}
+        {/* Live search sources */}
+        {msg.sources&&msg.sources.length>0&&(
+          <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,maxWidth:"min(780px,100%)"}}>
+            <div style={{fontSize:12,color:t.gold,letterSpacing:"2.5px",textTransform:"uppercase",fontWeight:600}}>Sources</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {msg.sources.map((src,k)=>{ let host=""; try{host=new URL(src.url).hostname.replace(/^www\./,"");}catch{}
+                return <a key={k} href={src.url} target="_blank" rel="noopener noreferrer" title={src.url}
+                  style={{display:"flex",alignItems:"center",gap:7,padding:"6px 11px",borderRadius:4,background:t.card,border:`1px solid ${t.border}`,borderLeft:`3px solid ${agent.color}`,textDecoration:"none",color:t.text,fontSize:13.5,maxWidth:280}}>
+                  <span style={{fontWeight:700,color:agent.color}}>{k+1}</span>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{src.title&&src.title!==src.url?src.title:host}</span>
+                  <span style={{color:t.muted,fontSize:12,flexShrink:0}}>{host}</span>
+                </a>; })}
+            </div>
+          </div>
+        )}
+        {msg.note&&<div style={{fontSize:13,color:t.muted,fontStyle:"italic",marginTop:6}}>{msg.note}</div>}
         {/* Studio design result — preview + download (additive) */}
         {msg.design&&(
           <div style={{marginTop:8,marginBottom:4,padding:12,borderRadius:12,background:t.card,border:`1px solid ${t.border}`,maxWidth:340,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
@@ -1099,6 +1416,12 @@ function App(){
   const [showReview,setShowReview] = useState(false);
   const [decksLeft,setDecksLeft] = useState(null);     // null = unlimited / unknown
   const [showDeckLimit,setShowDeckLimit] = useState(false);
+  const [searchesLeft,setSearchesLeft] = useState(null);   // null = unlimited / unknown
+  const [showLimitKind,setShowLimitKind] = useState(null); // "search" when the search limit is hit
+  const voiceRef = useRef(null);
+  const apiRef = useRef({});
+  const [entered,setEntered] = useState(0);        // set when the user signs in / enters as guest
+  const [inputFocused,setInputFocused] = useState(0);
   const [lastReviewCfg,setLastReviewCfg] = useState(null);
   const [toast,setToast]         = useState("");
   const [mobile,setMobile]       = useState(window.innerWidth<720);
@@ -1120,7 +1443,7 @@ function App(){
   useEffect(()=>{if(!msgs.length||busy)return;const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,busy,agent.id,user?.id]);
   useEffect(()=>{botRef.current?.scrollIntoView({behavior:busy?"auto":"smooth"});},[msgs,busy]);
 
-  useEffect(()=>{ if(!agent.design) return; (async()=>{ const q=await fetchDeckQuota(ls.get("adl-ses")||{}); if(q) setDecksLeft(q.unlimited?null:q.decksLeft); })(); },[agent.id,user?.id]);
+  useEffect(()=>{ if(!agent.design&&!agent.web) return; (async()=>{ const q=await fetchDeckQuota(ls.get("adl-ses")||{}); if(q){ setDecksLeft(q.unlimited?null:q.decksLeft); setSearchesLeft(q.unlimited||typeof q.searchesLeft!=="number"?null:q.searchesLeft); } })(); },[agent.id,user?.id]);
   const toggleTheme=()=>{const n=dark?"light":"dark";setTheme(n);ls.set("adl-theme",n);};
   const showT=m=>{setToast(m);setTimeout(()=>setToast(""),2800);};
   const logout=()=>{ls.del("adl-ses");setUser(null);setGuest(false);setConvs({});setView("auth");};
@@ -1225,10 +1548,12 @@ If source material is provided, build the deck from it. Output JSON only.`;
         const res=await buildDeck(spec,msg=>push("🎨 "+msg,null));
         const left=typeof d.decksLeft==="number"?d.decksLeft:null;
         const note=left===null?"":(left>0?`\n\n*${left} of ${FREE_DECKS} free presentations left today.*`:`\n\n*That was your last free presentation today — Premium gives you unlimited.*`);
+        setTimeout(()=>voiceRef.current?.onDesign?.({kind:"pptx",title:spec.title||"your presentation",count:res.count}),300);
         push("✅ **\""+(spec.title||"Untitled")+"\"** is ready — "+res.count+" slides in the "+res.theme+" theme, with speaker notes. Tap **Save** to download your PowerPoint."+note,{kind:"pptx",url:res.url,filename:res.filename,preview:res.preview});
       } else if(spec.type==="image"){
         const gen=pollImageURL(spec.prompt,spec.width,spec.height);
         const preview=await fetchImageObjectURL(gen);
+        setTimeout(()=>voiceRef.current?.onDesign?.({kind:"image"}),300);
         push((spec.caption?("🎨 "+spec.caption):"🎨 Here's your graphic.")+" — tap Save to download.",{kind:"image",url:preview,filename:((spec.caption||"graphic").replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-").slice(0,40)||"graphic")+".png",preview});
       } else {
         push("⚠️ Unsupported design type. Ask for a presentation or a graphic.",null);
@@ -1239,8 +1564,8 @@ If source material is provided, build the deck from it. Output JSON only.`;
     setBusy(false);
   },[msgs,agent,user]);
 
-  const send=useCallback(async()=>{
-    const text=(input||"").trim();
+  const send=useCallback(async(override)=>{
+    const text=(typeof override==="string"?override:(input||"")).trim();
     if(!text&&!attachment)return;
     if(busy)return;
     if(user?.role!=="admin"&&limitHit()){setShowLimit(true);return;}
@@ -1280,9 +1605,11 @@ If source material is provided, build the deck from it. Output JSON only.`;
     const apiMessages=trimHistory(hist);
 
     const ses=ls.get("adl-ses")||{};
+    const today=new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
     const payload={
       messages:apiMessages,
-      systemPrompt:agent.system,
+      systemPrompt:agent.web?agent.system+" Today is "+today+".":agent.system,
+      ...(agent.web&&!apiMessages.some(m=>Array.isArray(m.content))?{model:"web"}:{}),
       hasImage:apiMessages.some(m=>Array.isArray(m.content)),
       username:ses.username||null,
       sessionToken:ses.sessionToken||null
@@ -1290,14 +1617,21 @@ If source material is provided, build the deck from it. Output JSON only.`;
 
     /* Stream the answer in as it is written */
     const ts=new Date().toISOString();
-    const reply=await chatRequest(payload,partial=>{
+    const meta={};
+    let reply=await chatRequest(payload,partial=>{
       setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content:partial,timestamp:ts}]}));
-    });
+    },meta);
+    if(typeof meta.searchesLeft==="number") setSearchesLeft(meta.searchesLeft);
+    if(meta.code==="SEARCH_LIMIT"){ setSearchesLeft(0); setShowLimitKind("search"); }
+    if(agent.web&&meta.search==="off"&&!/^⚠️/.test(reply)) reply="*Live search is unavailable right now, so this answer comes from general knowledge and may be out of date.*\n\n"+reply;
+    const sources=agent.web?(meta.sources||[]).slice(0,8):[];
 
     setConvs(p=>({...p,[agent.id]:[
       ...hist,
-      {role:"assistant",content:reply,timestamp:ts}
+      {role:"assistant",content:reply,timestamp:ts,...(sources.length?{sources}:{}),
+        ...(agent.web&&typeof meta.searchesLeft==="number"?{note:meta.searchesLeft>0?`${meta.searchesLeft} of ${FREE_SEARCHES} free live searches left today`:"That was your last free live search today — Premium gives you unlimited"}:{})}
     ]}));
+    voiceRef.current?.onReply?.({agent,text:reply,sources});
     setBusy(false);
   },[input,attachment,busy,msgs,agent,user]);
 
@@ -1348,6 +1682,15 @@ If source material is provided, build the deck from it. Output JSON only.`;
     setBusy(false);
   },[lastReviewCfg,user]);
 
+  apiRef.current={
+    sendText:txt=>send(txt),
+    sendInput:()=>{ if(!(input||"").trim()) return false; send(); return true; },
+    setInput:txt=>setInput(txt),
+    switchTo:id=>{ const a=AGENTS.find(x=>x.id===id); if(a) switchAgent(a); },
+    clear:()=>clearChat(),
+    setTheme:m=>{ if((m==="dark")!==dark) toggleTheme(); },
+    saveLast:()=>{ const d=[...msgs].reverse().find(m=>m.design&&m.design.url); if(!d) return false; saveFile(d.design.url,d.design.filename); return true; },
+  };
   const clearChat=()=>{setConvs(p=>({...p,[agent.id]:[]}));ls.del(user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`);showT("Chat cleared");};
   const exportChat=()=>{
     if(!msgs.length){showT("Nothing to export.");return;}
@@ -1376,13 +1719,14 @@ If source material is provided, build the deck from it. Output JSON only.`;
       <div style={{width:32,height:32,border:"3px solid rgba(122,34,50,.2)",borderTopColor:"#7A2232",borderRadius:"50%",animation:"spin .9s linear infinite"}}/>
     </div>
   );
-  if(view==="auth")  return <AuthScreen onAuth={u=>{setUser(u);setGuest(false);setView("chat");}} onGuest={()=>{setGuest(true);setView("chat");}} t={t} dark={dark}/>;
+  if(view==="auth")  return <AuthScreen onAuth={u=>{setUser(u);setGuest(false);setView("chat");setEntered(Date.now());}} onGuest={()=>{setGuest(true);setView("chat");setEntered(Date.now());}} t={t} dark={dark}/>;
   if(view==="admin") return <AdminPanel onBack={()=>setView("chat")} t={t} dark={dark} toggleTheme={toggleTheme}/>;
 
   return(
     <>
     <style>{`body,#root{background:${t.bg}} .md code{background:${dark?"rgba(255,255,255,.08)":"rgba(0,0,0,.06)"}} .md pre{background:${dark?"#0F0F11":"#EDE8DF"};border:1px solid ${t.border}} .md .h1,.md .h2,.md .h3{color:${t.text}} textarea::placeholder,input::placeholder{color:${t.dim}}`}</style>
     {showDeckLimit&&<DeckLimitModal t={t} dark={dark} onClose={()=>setShowDeckLimit(false)}/>}
+    {showLimitKind&&<DeckLimitModal kind={showLimitKind} t={t} dark={dark} onClose={()=>setShowLimitKind(null)}/>}
     {showWhatsNew&&<WhatsNewModal t={t} dark={dark} onClose={()=>{ls.set(WHATS_NEW_KEY,true);setShowWhatsNew(false);}}/>}
     {showReview&&<ReviewModal t={t} dark={dark} isRegistered={!!user&&!isGuest} onClose={()=>setShowReview(false)} onGenerate={genReview}/>}
     {showLimit&&<LimitModal t={t} dark={dark} onClose={()=>setShowLimit(false)}/>}
@@ -1451,6 +1795,9 @@ If source material is provided, build the deck from it. Output JSON only.`;
               <div style={{fontSize:14,color:t.muted,marginBottom:22,padding:"6px 16px",borderRadius:4,background:t.card,border:`1px solid ${t.border}`}}>
                 📎 Supports: PDF, Word, Excel, PowerPoint, CSV, images & more
               </div>
+              {agent.web&&<div style={{fontSize:14.5,color:t.text,marginTop:-10,marginBottom:20,padding:"7px 16px",borderRadius:4,background:t.card,border:`1px solid ${t.gold}66`}}>
+                ⊕ Live web search with sources · {searchesLeft===null?"Unlimited searches":`${searchesLeft} of ${FREE_SEARCHES} free searches left today`}
+              </div>}
               {agent.design&&<div style={{fontSize:14.5,color:t.text,marginTop:-10,marginBottom:20,padding:"7px 16px",borderRadius:4,background:t.card,border:`1px solid ${t.gold}66`}}>
                 ✦ Grace Studio Pro · {decksLeft===null?"Unlimited presentations":`${decksLeft} of ${FREE_DECKS} free presentations left today`}
               </div>}
@@ -1526,7 +1873,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
             <input ref={fileRef} type="file" accept={ACCEPT} onChange={handleFile} style={{display:"none"}}/>
 
             {/* Textarea */}
-            <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)}
+            <textarea ref={taRef} value={input} onChange={e=>{setInput(e.target.value);setInputFocused(Date.now());}}
               onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!mobile){e.preventDefault();send();}}}
               placeholder={attachment?`Ask about ${attachment.name||"the file"}...`:(agent.web?`Ask ${agent.name} to search...`:`Message ${agent.name}...`)}
               rows={1} style={{flex:1,color:t.text,fontSize:17,lineHeight:1.6,fontFamily:"'EB Garamond','Times New Roman',serif",maxHeight:130,overflowY:"auto",paddingTop:3}}
@@ -1555,6 +1902,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
       </div>
     </div>
 
+    <VoiceAssistant t={t} dark={dark} mobile={mobile} user={user} isGuest={isGuest} agent={agent} entered={entered} inputFocused={inputFocused} apiRef={apiRef} voiceRef={voiceRef}/>
     {toast&&<div style={{position:"fixed",bottom:mobile?88:20,left:"50%",transform:"translateX(-50%)",background:t.card,border:`1px solid ${t.border}`,borderRadius:10,padding:"9px 18px",fontSize:13.5,color:t.text,boxShadow:"0 6px 24px rgba(0,0,0,.15)",zIndex:400,whiteSpace:"nowrap",animation:"fadeUp .3s ease"}}>{toast}</div>}
     </>
   );
