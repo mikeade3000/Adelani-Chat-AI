@@ -709,7 +709,7 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
   const [pendingLink,setPendingLink]=useState(null);
   const [showSettings,setShowSettings]=useState(false);
   const [voices,setVoices]=useState([]);
-  const [settings,setSettings]=useState(()=>({voice:"",rate:0.95,handsFree:true,...(ls.get("adl-voice-settings")||{})}));
+  const [settings,setSettings]=useState(()=>({voice:"",rate:0.95,handsFree:true,bargeIn:true,...(ls.get("adl-voice-settings")||{})}));
   const st=useRef({last:"",links:[],awaiting:null,offeredTyping:false,rec:null,greeted:false,prevAgent:agent.id});
   const name=isGuest?"":(user?.username||"");
 
@@ -719,7 +719,8 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
   const setVoicePref=v=>{ setPref(v); ls.set("adl-voice",v); };
 
   /* ── speaking ── */
-  const stopSpeaking=()=>{ try{window.speechSynthesis.cancel();}catch{} setSpeaking(false); };
+  // Every new speech gets a number; callbacks from older (cancelled) speech are ignored.
+  const stopSpeaking=()=>{ st.current.gen=(st.current.gen||0)+1; stopBargeIn(); try{window.speechSynthesis.cancel();}catch{} setSpeaking(false); };
   const say=(text,then)=>{
     setCaption(text); setOpen(true);
     if(!supported){ then&&then(); return; }
@@ -727,16 +728,60 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
     const parts=sentences(speakable(text),200);
     if(!parts.length){ then&&then(); return; }
     st.current.last=text;
+    const gen=st.current.gen;
+    st.current.speakingText=parts.join(" ").toLowerCase();
     parts.forEach((part,i)=>{
       const u=new SpeechSynthesisUtterance(part);
       const list=voices.length?voices:rankVoices(window.speechSynthesis.getVoices()); // voices may not be in state yet
       const vc=list.find(v=>v.name===settings.voice)||list[0]||null;
       if(vc){ u.voice=vc; u.lang=vc.lang; } else u.lang="en-GB";
       u.rate=settings.rate; u.pitch=0.92;
-      if(i===0) u.onstart=()=>setSpeaking(true);
-      if(i===parts.length-1){ u.onend=()=>{ setSpeaking(false); then&&then(); }; u.onerror=()=>setSpeaking(false); }
+      if(i===0) u.onstart=()=>{ if(st.current.gen!==gen) return; setSpeaking(true); startBargeIn(gen); };
+      if(i===parts.length-1){
+        u.onend=()=>{ if(st.current.gen!==gen) return; stopBargeIn(); setSpeaking(false); then&&then(); };
+        u.onerror=()=>{ if(st.current.gen!==gen) return; stopBargeIn(); setSpeaking(false); };
+      }
       window.speechSynthesis.speak(u);
     });
+  };
+
+  /* ── interrupting: say "stop" while Ade is reading ──
+     A second, background recogniser runs only while Ade speaks and waits for a stop
+     word. Ade's own voice can leak from the speakers into the microphone, so a stop
+     word that is part of what he is reading right now is ignored. */
+  const STOP_WORDS=/\b(stop|wait|hold on|pause|excuse me|enough|ade)\b/i;
+  function stopBargeIn(){ const r=st.current.barge; st.current.barge=null; if(r){ r.onend=null; try{r.abort();}catch{} } }
+  function startBargeIn(gen){
+    if(!SR_API||!settings.bargeIn||st.current.barge||st.current.micGranted===false) return;
+    const go=()=>{
+      if(st.current.gen!==gen||st.current.barge) return;
+      const r=new SR_API();
+      r.lang=(navigator.language||"en-GB").toLowerCase().startsWith("en")?navigator.language:"en-GB";
+      r.continuous=true; r.interimResults=true; r.maxAlternatives=1;
+      r.onresult=e=>{
+        for(let i=e.resultIndex;i<e.results.length;i++){
+          const heardNow=e.results[i][0].transcript.toLowerCase();
+          const m=heardNow.match(STOP_WORDS); if(!m) continue;
+          if(new RegExp("\\b"+m[1]+"\\b").test(st.current.speakingText||"")) continue; // probably Ade's own voice
+          interrupt(); return;
+        }
+      };
+      r.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed") st.current.micGranted=false; };
+      r.onend=()=>{ if(st.current.barge===r){ st.current.barge=null; if(st.current.gen===gen) setTimeout(go,150); } }; // keep listening while he speaks
+      st.current.barge=r;
+      try{ r.start(); }catch{ st.current.barge=null; }
+    };
+    // Only listen in the background once the user has allowed the microphone,
+    // so a permission pop-up never appears in the middle of a reading.
+    if(st.current.micGranted) return go();
+    if(navigator.permissions&&navigator.permissions.query){
+      navigator.permissions.query({name:"microphone"}).then(p=>{ if(p.state==="granted"){ st.current.micGranted=true; go(); } }).catch(()=>{});
+    }
+  }
+  const interrupt=()=>{
+    stopSpeaking();
+    setCaption("I've stopped. Go ahead — I'm listening.");
+    listen({quiet:true});
   };
 
   /* ── listening ── */
@@ -748,7 +793,7 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
     rec.lang=(navigator.language||"en-GB").toLowerCase().startsWith("en")?navigator.language:"en-GB";
     rec.interimResults=true; rec.maxAlternatives=1; rec.continuous=false;
     let finalText="";
-    rec.onresult=e=>{ let txt=""; for(let i=0;i<e.results.length;i++){ txt+=e.results[i][0].transcript; if(e.results[i].isFinal) finalText=txt; } setHeard(txt); };
+    rec.onresult=e=>{ st.current.micGranted=true; let txt=""; for(let i=0;i<e.results.length;i++){ txt+=e.results[i][0].transcript; if(e.results[i].isFinal) finalText=txt; } setHeard(txt); };
     rec.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed") setCaption("I need permission to use your microphone. Please allow it in your browser, then tap my microphone again."); };
     rec.onend=()=>{ setListening(false); st.current.rec=null; const txt=(finalText||"").trim(); setHeard(""); if(txt) handle(txt); else if(opts.quiet!==true&&st.current.awaiting){ st.current.awaiting=null; } };
     st.current.rec=rec; setListening(true); setOpen(true);
@@ -779,7 +824,7 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
     if(/(turn off|switch off|disable|stop using|stop the) (the )?voice/.test(s)){ setVoicePref("off"); say("Voice assistance is off. Tap me anytime to turn it back on."); return; }
     if(/(repeat|say (that|it) again|read (that|it) again|come again|pardon)/.test(s)){ say(st.current.lastSpokenReply||st.current.last||"I haven't said anything yet."); return; }
     if(/(what can you do|help me with voice|voice commands|what can i say)/.test(s)){
-      say("Here's what you can say. Ask any question and I'll send it to the current agent. Say 'switch to Scholar' or any agent's name. Say 'open the first source' or 'open the link'. Say 'save the presentation'. Say 'read that again', 'stop', 'clear the chat', 'dark mode', or 'turn off voice'.",followUp); return; }
+      say("Here's what you can say. Ask any question and I'll send it to the current agent. Say 'switch to Scholar' or any agent's name. Say 'open the first source' or 'open the link'. Say 'save the presentation'. Say 'read that again', 'clear the chat', 'dark mode', or 'turn off voice'. And whenever I'm reading, just say 'stop' and I'll stop and listen to you.",followUp); return; }
     const sw=s.match(/\b(?:switch|talk|go|change|take me|move|open|connect me)\s+(?:over\s+)?(?:to\s+)?(?:the\s+)?(asha|scholar|bizna|business|dawa|health|ubuntu|nexus|search|grace|design)\b/);
     if(sw){ api.switchTo&&api.switchTo(AGENT_WORDS[sw[1]]); return; }
     const lk=s.match(/\b(?:open|click|visit|show|go to)\s+(?:the\s+)?(?:(first|second|third|fourth|fifth|sixth|seventh|eighth|last|\d)\s+)?(?:link|source|website|site|result|article)(?:\s+(?:number\s+)?(one|two|three|four|five|six|seven|eight|\d))?/);
@@ -864,7 +909,7 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
         <div style={{position:"absolute",right:size+12,bottom:4,width:mobile?"min(78vw,300px)":320,background:t.card,border:`1px solid ${t.border}`,borderTop:"3px solid #7A2232",borderRadius:8,padding:"12px 14px",boxShadow:dark?"0 12px 30px rgba(0,0,0,.5)":"0 12px 30px rgba(60,40,10,.16)",animation:"adeIn .3s ease"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
             <span style={{fontFamily:DISPLAY,fontWeight:700,fontSize:19,color:t.text}}>Ade</span>
-            <span style={{fontSize:12,color:t.muted,fontStyle:"italic",flex:1}}>{listening?"listening…":speaking?"speaking…":"voice assistant"}</span>
+            <span style={{fontSize:12,color:t.muted,fontStyle:"italic",flex:1}}>{listening?"listening…":speaking?(SR_API&&settings.bargeIn?"speaking… say “stop” to interrupt":"speaking…"):"voice assistant"}</span>
             <button title="Voice settings" onClick={()=>setShowSettings(v=>!v)} style={{fontSize:15,color:t.muted,padding:2}}>⚙</button>
             <button title="Close" onClick={()=>{setOpen(false);stopSpeaking();}} style={{fontSize:15,color:t.muted,padding:2}}>✕</button>
           </div>
@@ -885,6 +930,7 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
               <label>Speaking speed: {settings.rate.toFixed(2)}×
                 <input type="range" min="0.75" max="1.25" step="0.05" value={settings.rate} onChange={e=>saveSettings({rate:Number(e.target.value)})} style={{width:"100%"}}/>
               </label>
+              <label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" checked={settings.bargeIn} onChange={e=>saveSettings({bargeIn:e.target.checked})}/> Say “stop” to interrupt Ade while he reads</label>
               <label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" checked={settings.handsFree} onChange={e=>saveSettings({handsFree:e.target.checked})}/> Listen for my reply after Ade speaks</label>
               <button style={ghost} onClick={()=>say("Hello! This is how I sound. I'm here to help you get the most out of Adelani AI.")}>▶ Test voice</button>
               {pref==="on"&&<button style={ghost} onClick={()=>{ stopSpeaking(); setVoicePref("off"); setCaption("Voice assistance is off."); }}>Turn off voice assistance</button>}
@@ -895,7 +941,7 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
       <div style={{position:"relative",width:size,height:size}} className="ade-float">
         {(listening||speaking)&&<span className="ade-ring" style={{borderColor:listening?"#4ADE80":"#D9B86A"}}/>}
         <button aria-label="Ade voice assistant" title={pref==="on"?"Tap to speak to Ade":"Ade — voice assistant"}
-          onClick={()=>{ if(speaking){ stopSpeaking(); return; } if(listening){ stopListening(); return; } if(pref==="on") listen(); else setOpen(o=>!o); }}
+          onClick={()=>{ if(speaking){ if(SR_API&&pref==="on") interrupt(); else stopSpeaking(); return; } if(listening){ stopListening(); return; } if(pref==="on") listen(); else setOpen(o=>!o); }}
           style={{width:size,height:size,borderRadius:"50%",padding:0,border:`2px solid ${t.gold}`,boxShadow:`0 0 0 3px ${t.bg}, 0 10px 24px rgba(0,0,0,.3)`,background:"transparent",opacity:pref==="off"&&!open?0.75:1}}>
           <AdeFace speaking={speaking} looking={looking} size={size-4}/>
         </button>
