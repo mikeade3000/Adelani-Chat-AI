@@ -93,6 +93,11 @@ button:active{transform:scale(0.96)}
 .md .h3{font-weight:600;font-size:17px;margin:10px 0 4px;font-variant:small-caps;letter-spacing:.4px}
 .md .li{display:flex;gap:9px;margin:5px 0;line-height:1.7}
 .md .gap{height:9px}
+.md .mdt-wrap{overflow-x:auto;margin:8px 0 10px}
+.md table.mdt{border-collapse:collapse;font-size:15px;min-width:60%}
+.md table.mdt th{background:#7A2232;color:#FFFBF2;text-align:left;padding:7px 12px;font-weight:600}
+.md table.mdt td{padding:6px 12px;border-bottom:1px solid rgba(176,141,60,.35)}
+.md table.mdt tr:nth-child(even) td{background:rgba(176,141,60,.08)}
 .md .rule{border:none;height:1px;margin:14px 0;background:linear-gradient(90deg,transparent,#B08D3C99,transparent)}
 .md a{text-underline-offset:2px}
 .md>:first-child{margin-top:0}
@@ -194,8 +199,8 @@ const DAILY_LIMIT = 10;
 const WA_LINK     = "https://wa.me/2348115800375?text=" + encodeURIComponent("Hello Dr. Adewusi, I'd like to upgrade to Adelani AI Premium.");
 /* Premium promo plans — paid via WhatsApp, granted by the admin in the Admin Panel. */
 const PLANS = [
-  {id:"premium5",  days:5,  price:"₦2,000", label:"5 days"},
-  {id:"premium10", days:10, price:"₦3,000", label:"10 days", best:true},
+  {id:"premium2", days:2, price:"₦2,500", label:"2 days"},
+  {id:"premium5", days:5, price:"₦3,500", label:"5 days", best:true},
 ];
 const waPlan = (plan,username) => "https://wa.me/2348115800375?text=" + encodeURIComponent(
   `Hello Dr. Adewusi, I'd like the ${plan.days}-day Adelani AI Premium (${plan.price}).`+(username?` My username is ${username}.`:" My username is: "));
@@ -602,6 +607,12 @@ function md(raw,accent,dark){
   const NL="\u0000"; // keeps line breaks inside code blocks out of the paragraph logic below
   let t=raw.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   t=t.replace(/```[\w]*\n?([\s\S]*?)```/g,(m,code)=>`<pre style="background:${pc};border:1px solid ${dark?"#2F2920":"#E3D7C1"}"><code>${code.replace(/\n/g,NL)}</code></pre>`);
+  // Markdown tables → real tables (header row, then a |---| separator row)
+  t=t.replace(/(^|\n)(\s*\|[^\n]*\|?[ \t]*\n\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?[ \t]*(?:\n\s*\|[^\n]*)*)/g,(all,pre,block)=>{
+    const rows=block.trim().split("\n").filter((l,i)=>i!==1).map(l=>{ let x=l.trim(); if(x.startsWith("|"))x=x.slice(1); if(x.endsWith("|"))x=x.slice(0,-1); return x.split("|").map(c=>c.trim()); });
+    const head=rows.shift()||[];
+    return pre+`<div class="mdt-wrap"><table class="mdt"><thead><tr>${head.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${head.map((_,k)=>`<td>${r[k]||""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  });
   t=t.replace(/`([^`\n]+)`/g,`<code style="background:${cc}">$1</code>`);
   t=t.replace(/\*\*([^*\n]+)\*\*/g,"<strong>$1</strong>");
   t=t.replace(/\*([^*\n]+)\*/g,"<em>$1</em>");
@@ -625,6 +636,37 @@ function md(raw,accent,dark){
    Downloads in place (no new tab, which made phones ignore the file name).
    Returns false if the file is gone — files live only until the page is reloaded. */
 const MIME_EXT={"image/jpeg":".jpg","image/png":".png","image/webp":".webp"};
+/* ══════════ WORD (.docx) DOWNLOADS ══════════
+   word-export.js + vendor/docx.min.js are loaded only when someone downloads. */
+const WANTS_DOCX=/\b(docx|\.docx|word\s+(doc|docs|document|documents|file|format|version)|ms\s*word|microsoft\s+word)\b/i;
+const WANTS_DOWNLOAD=/\b(download(able)?|save\s+(it|this)\s+as)\b/i;
+const wantsDocx=t=>WANTS_DOCX.test(t||"")||(WANTS_DOWNLOAD.test(t||"")&&/\b(document|doc|file|report|article|letter|essay|cv|resume|proposal|plan|memo|notes|it|this)\b/i.test(t||""));
+async function downloadDocx(markdown,opts){
+  await loadScript("./vendor/docx.min.js");
+  await loadScript("./word-export.js?v=1.0");
+  if(!window.AdelaniWord) throw new Error("Word export could not load. Check that word-export.js and vendor/docx.min.js were uploaded.");
+  const {blob,filename}=await window.AdelaniWord.build(markdown,opts||{});
+  const url=URL.createObjectURL(blob);
+  await saveFile(url,filename);
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  return filename;
+}
+/* Small button that builds the .docx from the message text when clicked — never expires. */
+function DocxButton({content,agentName,t,dark,big,auto}){
+  const [state,setState]=useState("idle"); // idle | busy | done | error
+  const go=async()=>{
+    if(state==="busy") return;
+    setState("busy");
+    try{ await downloadDocx(content,{agent:agentName}); setState("done"); setTimeout(()=>setState("idle"),4000); }
+    catch(e){ console.error(e); setState("error"); setTimeout(()=>setState("idle"),5000); }
+  };
+  useEffect(()=>{ if(auto) go(); },[]); // auto-download once when the user asked for a Word file
+  const label=state==="busy"?"Preparing…":state==="done"?"✓ Downloaded":state==="error"?"Couldn't create — try again":(big?"⬇ Download Word (.docx)":"⬇ Word");
+  return big
+    ?<button onClick={go} style={{height:36,padding:"0 16px",borderRadius:6,background:"linear-gradient(135deg,#2B579A,#1E3F73)",border:"1px solid #B08D3C",color:"#FFF",fontSize:14.5,fontWeight:600,fontFamily:SERIF,cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+    :<button onClick={go} title="Download this answer as a Word document" style={{fontSize:12.5,color:state==="error"?"#C0392B":t.muted,padding:"2px 6px",borderRadius:4,border:`1px solid ${t.border}`,background:t.card,fontFamily:SERIF,cursor:"pointer"}}>{label}</button>;
+}
+
 async function saveFile(url,filename){
   if(!url) return false;
   if(!url.startsWith("blob:")){ window.open(url,"_blank","noopener"); return true; } // remote image fallback
@@ -847,7 +889,7 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
     if(/(turn off|switch off|disable|stop using|stop the) (the )?voice/.test(s)){ setVoicePref("off"); say("Voice assistance is off. Tap me anytime to turn it back on."); return; }
     if(/(repeat|say (that|it) again|read (that|it) again|come again|pardon)/.test(s)){ say(st.current.lastSpokenReply||st.current.last||"I haven't said anything yet."); return; }
     if(/(what can you do|help me with voice|voice commands|what can i say)/.test(s)){
-      say("Here's what you can say. Ask any question and I'll send it to the current agent. Say 'switch to Scholar' or any agent's name. Say 'open the first source' or 'open the link'. Say 'save the presentation'. Say 'read that again', 'clear the chat', 'dark mode', or 'turn off voice'. And whenever I'm reading, just say 'stop' and I'll stop and listen to you.",followUp); return; }
+      say("Here's what you can say. Ask any question and I'll send it to the current agent. Say 'switch to Scholar' or any agent's name. Say 'open the first source' or 'open the link'. Say 'save the presentation', or 'download it as Word' for a Word document. Say 'read that again', 'clear the chat', 'dark mode', or 'turn off voice'. And whenever I'm reading, just say 'stop' and I'll stop and listen to you.",followUp); return; }
     const sw=s.match(/\b(?:switch|talk|go|change|take me|move|open|connect me)\s+(?:over\s+)?(?:to\s+)?(?:the\s+)?(asha|scholar|bizna|business|dawa|health|ubuntu|nexus|search|grace|design)\b/);
     if(sw){ api.switchTo&&api.switchTo(AGENT_WORDS[sw[1]]); return; }
     const lk=s.match(/\b(?:open|click|visit|show|go to)\s+(?:the\s+)?(?:(first|second|third|fourth|fifth|sixth|seventh|eighth|last|\d)\s+)?(?:link|source|website|site|result|article)(?:\s+(?:number\s+)?(one|two|three|four|five|six|seven|eight|\d))?/);
@@ -859,6 +901,8 @@ function VoiceAssistant({t,dark,mobile,user,isGuest,agent,entered,inputFocused,a
       if(n>links.length){ say(`There ${links.length===1?"is only one link":"are only "+links.length+" links"}.`); return; }
       openLink(links[n-1]); return;
     }
+    if(/\b(save|download|export)\b/.test(s)&&/\b(word|docx|document)\b/.test(s)){
+      if(api.saveDocx&&api.saveDocx()) say("Preparing your Word document now — it will download in a moment."); else say("There's no answer to save yet. Ask me something first."); return; }
     if(/\b(save|download)\b/.test(s)&&/\b(presentation|slides?|deck|powerpoint|file|it|image|graphic|picture)\b/.test(s)){
       if(api.saveLast&&api.saveLast()) say("Saving it to your device now."); else say("I don't have a file to save yet. Ask Grace to design a presentation first."); return; }
     if(/\bdark mode\b/.test(s)){ api.setTheme&&api.setTheme("dark"); say("Dark mode is on."); return; }
@@ -1203,7 +1247,9 @@ function LimitModal({t,dark,onClose}){
 }
 
 /* ══════════ BUBBLE ══════════ */
-function Bubble({msg,agent,t,dark,live}){
+function Bubble({msg,agent,t,dark,live,streaming}){
+  const [copied,setCopied]=useState(false);
+  const canExport=msg.role!=="user"&&msg.content&&!streaming&&!msg.design&&!/^\s*(⚠️|🎨|⏳|🔒)/.test(msg.content);
   const u=msg.role==="user";
   return(
     <div style={{display:"flex",justifyContent:u?"flex-end":"flex-start",marginBottom:16,gap:9,animation:"fadeUp .3s ease"}}>
@@ -1240,6 +1286,24 @@ function Bubble({msg,agent,t,dark,live}){
           </div>
         )}
         {msg.note&&<div style={{fontSize:13,color:t.muted,fontStyle:"italic",marginTop:6}}>{msg.note}</div>}
+        {/* Word document requested by the user */}
+        {msg.docx&&canExport&&(
+          <div style={{marginTop:8,padding:12,borderRadius:8,background:t.card,border:`1px solid ${t.border}`,borderLeft:"3px solid #2B579A",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",maxWidth:420}}>
+            <div style={{fontSize:26}}>📄</div>
+            <div style={{flex:1,minWidth:140}}>
+              <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:17,color:t.text}}>Word document ready</div>
+              <div style={{fontSize:12.5,color:t.muted}}>Editable .docx · headings, lists & tables kept</div>
+            </div>
+            <DocxButton content={msg.content} agentName={agent.name} t={t} dark={dark} big auto={msg.docxAuto&&live}/>
+          </div>
+        )}
+        {canExport&&(
+          <div style={{display:"flex",gap:6,marginTop:6}}>
+            {!msg.docx&&<DocxButton content={msg.content} agentName={agent.name} t={t} dark={dark}/>}
+            <button onClick={()=>{ try{ navigator.clipboard.writeText(msg.content); setCopied(true); setTimeout(()=>setCopied(false),2000); }catch{} }} title="Copy this answer"
+              style={{fontSize:12.5,color:t.muted,padding:"2px 6px",borderRadius:4,border:`1px solid ${t.border}`,background:t.card,fontFamily:SERIF,cursor:"pointer"}}>{copied?"✓ Copied":"⧉ Copy"}</button>
+          </div>
+        )}
         {/* Studio design result — preview + download (additive) */}
         {msg.design&&(
           <div style={{marginTop:8,marginBottom:4,padding:12,borderRadius:12,background:t.card,border:`1px solid ${t.border}`,maxWidth:340,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
@@ -1781,9 +1845,11 @@ If source material is provided, build the deck from it. Output JSON only.`;
 
     const ses=ls.get("adl-ses")||{};
     const today=new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+    const docxWanted=wantsDocx(text);
+    const DOCX_NOTE=" The user wants this as a downloadable Word document: the app automatically turns your answer into a .docx file. Write the complete, final document content directly — start with a # title, use ## headings, lists and markdown tables where useful. Never say you cannot create or attach files, and don't add chatty preambles.";
     const payload={
       messages:apiMessages,
-      systemPrompt:agent.web?agent.system+" Today is "+today+".":agent.system,
+      systemPrompt:(agent.web?agent.system+" Today is "+today+".":agent.system)+(docxWanted?DOCX_NOTE:""),
       ...(agent.web&&!apiMessages.some(m=>Array.isArray(m.content))?{model:"web"}:{}),
       hasImage:apiMessages.some(m=>Array.isArray(m.content)),
       username:ses.username||null,
@@ -1803,7 +1869,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
 
     setConvs(p=>({...p,[agent.id]:[
       ...hist,
-      {role:"assistant",content:reply,timestamp:ts,...(sources.length?{sources}:{}),
+      {role:"assistant",content:reply,timestamp:ts,...(sources.length?{sources}:{}),...(docxWanted&&!/^\s*⚠️/.test(reply)?{docx:true,docxAuto:true}:{}),
         ...(agent.web&&typeof meta.searchesLeft==="number"?{note:meta.searchesLeft>0?`${meta.searchesLeft} of ${FREE_SEARCHES} free live searches left today`:"That was your last free live search today — Premium gives you unlimited"}:{})}
     ]}));
     voiceRef.current?.onReply?.({agent,text:reply,sources});
@@ -1864,13 +1930,16 @@ If source material is provided, build the deck from it. Output JSON only.`;
     switchTo:id=>{ const a=AGENTS.find(x=>x.id===id); if(a) switchAgent(a); },
     clear:()=>clearChat(),
     setTheme:m=>{ if((m==="dark")!==dark) toggleTheme(); },
+    saveDocx:()=>{ const m=[...msgs].reverse().find(x=>x.role==="assistant"&&x.content&&!x.design&&!/^\s*(⚠️|🎨)/.test(x.content)); if(!m) return false; downloadDocx(m.content,{agent:agent.name}).catch(()=>{}); return true; },
     saveLast:()=>{ const d=[...msgs].reverse().find(m=>m.design&&m.design.url); if(!d) return false; saveFile(d.design.url,d.design.filename); return true; },
   };
   const clearChat=()=>{setConvs(p=>({...p,[agent.id]:[]}));ls.del(user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`);showT("Chat cleared");};
-  const exportChat=()=>{
+  const exportChat=async()=>{
     if(!msgs.length){showT("Nothing to export.");return;}
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Adelani AI</title><style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#1a1208;padding:24px}h1{font-size:26px;margin-bottom:4px}h2{font-size:12px;color:#999;letter-spacing:2px;text-transform:uppercase;font-weight:400;margin:4px 0 24px}.m{margin:12px 0;padding:13px 16px;border-radius:11px}.u{background:#f5f0e3;margin-left:60px}.a{background:#fff;border:1px solid #e0d8cc;margin-right:60px}.role{font-size:11px;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:5px}.txt{font-size:14px;line-height:1.75;white-space:pre-wrap}.ts{font-size:10px;color:#ccc;margin-top:5px}</style></head><body><h1>Adelani AI</h1><h2>${agent.name} · ${agent.role}</h2>${msgs.map(m=>`<div class="m ${m.role==="user"?"u":"a"}"><div class="role">${m.role==="user"?"You":agent.name}</div><div class="txt">${(m.content||"").replace(/</g,"&lt;")}</div><div class="ts">${new Date(m.timestamp).toLocaleString()}</div></div>`).join("")}<p style="margin-top:32px;font-size:11px;color:#ccc;border-top:1px solid #eee;padding-top:16px">Adelani AI Chat · ${new Date().toLocaleString()}</p></body></html>`;
-    const w=window.open("","_blank");if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),400);}else showT("Allow popups to export.");
+    showT("Preparing your Word document…");
+    const md=msgs.filter(m=>m.content).map(m=>`## ${m.role==="user"?"You":agent.name}\n\n${m.content}`).join("\n\n---\n\n");
+    try{ await downloadDocx(md,{title:`Conversation with ${agent.name}`,agent:agent.name}); showT("Downloaded as Word (.docx)"); }
+    catch(e){ showT("Couldn't create the Word file. Please try again."); }
   };
 
   /* ── ACCEPTED FILE TYPES ── */
@@ -1949,7 +2018,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
             <button onPointerDown={toggleTheme} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>
             {agent.id==="scholar"&&<button onPointerDown={()=>setShowReview(true)} title="Review Article Engine" style={{height:36,padding:"0 11px",borderRadius:9,background:"linear-gradient(135deg,#7A2232,#561520)",border:"none",color:"#FFF",fontSize:13,fontWeight:700,fontFamily:"'EB Garamond','Times New Roman',serif",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>◈{mobile?"":" Review"}</button>}
             {agent.id==="scholar"&&lastReviewCfg&&!!user&&!isGuest&&<button onPointerDown={continueReview} title="Continue the article" style={{height:36,padding:"0 11px",borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>⏭{mobile?"":" Continue"}</button>}
-            <button onPointerDown={exportChat} style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:t.muted,cursor:"pointer"}}>📄</button>
+            <button onPointerDown={exportChat} title="Download this conversation as a Word document" style={{width:36,height:36,borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:t.muted,cursor:"pointer"}}>📄</button>
             {!mobile&&<button onPointerDown={clearChat} style={{height:36,padding:"0 12px",borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:13,cursor:"pointer"}}>Clear</button>}
           </div>
         </div>
@@ -1959,11 +2028,11 @@ If source material is provided, build the deck from it. Output JSON only.`;
           ⭐ You're a Premium member — enjoy the full experience on the <a href={PORTAL_URL} style={{color:"#7A2232",fontWeight:600,filter:dark?"brightness(1.6)":"none"}}>Adelani Premium Portal →</a>
         </div>}
         {/* Premium ending / ended reminder */}
-        {user&&user.role!=="admin"&&user.premiumUntil&&(()=>{ const left=user.premiumUntil-Date.now(); if(left>36*3600000) return null;
+        {user&&user.role!=="admin"&&user.premiumUntil&&(()=>{ const left=user.premiumUntil-Date.now(); if(left>12*3600000) return null;
           const ended=left<=0; const hrs=Math.max(1,Math.round(left/3600000));
           return <div style={{padding:"7px 14px",background:ended?"rgba(122,34,50,.10)":"rgba(176,141,60,.14)",borderBottom:`1px solid ${t.border}`,fontSize:14,color:t.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",flexShrink:0}}>
             <span>⭐ {ended?"Your Premium has ended.":`Your Premium ends in about ${hrs} hour${hrs>1?"s":""}.`}</span>
-            <a href={waPlan(PLANS[1],user.username)} target="_blank" rel="noopener noreferrer" style={{color:"#7A2232",fontWeight:600,filter:dark?"brightness(1.6)":"none"}}>Renew on WhatsApp — 10 days ₦3,000 →</a>
+            <a href={waPlan(PLANS[1],user.username)} target="_blank" rel="noopener noreferrer" style={{color:"#7A2232",fontWeight:600,filter:dark?"brightness(1.6)":"none"}}>Renew on WhatsApp — 5 days ₦3,500 →</a>
           </div>; })()}
 
         {/* Mobile agent strip */}
@@ -2012,7 +2081,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
               </div>
             </div>
           )}
-          {msgs.map((m,i)=><Bubble key={i} msg={m} agent={agent} t={t} dark={dark} live={i===msgs.length-1}/>)}
+          {msgs.map((m,i)=><Bubble key={i} msg={m} agent={agent} t={t} dark={dark} live={i===msgs.length-1} streaming={busy&&i===msgs.length-1}/>)}
           {busy&&!(msgs.length&&msgs[msgs.length-1].role==="assistant"&&msgs[msgs.length-1].content)&&(
             <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:14,animation:"fadeUp .3s ease"}}>
               <Emblem icon={agent.icon} back={agent.name[0]} color={agent.color} size={34} mode="spin"/>
