@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#F4EEE2"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Adelani AI Chat</title>
+<link rel="icon" type="image/png" href="./assets/icon-32.png"/>
+<link rel="apple-touch-icon" href="./assets/apple-touch-icon.png"/>
+<link rel="manifest" href="./manifest.webmanifest"/>
 <!-- Classical typefaces (Garamond). display=swap: text shows at once in Times New Roman
      and switches to Garamond when the font arrives — fine on slow connections. -->
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -22,6 +25,8 @@
 html,body,#root{height:100%;overflow:hidden}
 body{font-family:'EB Garamond','Times New Roman',serif;overscroll-behavior:none;background:#F4EEE2;font-feature-settings:"liga","kern","onum"}
 textarea,input{resize:none;outline:none;border:none;-webkit-appearance:none;background:transparent}
+input[type=checkbox]{-webkit-appearance:checkbox;appearance:auto;width:16px;height:16px;accent-color:#7A2232;cursor:pointer;flex-shrink:0}
+input[type=range]{-webkit-appearance:auto;appearance:auto;accent-color:#7A2232}
 /* Allow text selection and copying on AI responses */
 .md, .msg-selectable{
   -webkit-user-select:text;
@@ -173,6 +178,13 @@ const {useState,useEffect,useRef,useCallback} = React;
 
 /* ══════════ CONFIG ══════════ */
 const BACKEND     = window.ADELANI_BACKEND || "https://adelani-ai-backend.mikeade3000.workers.dev"; // set in config.js
+/* Two sites, one app: config.js sets ADELANI_MODE to "free" (public app, guests welcome)
+   or "portal" (the Premium Portal — sign-in only, full app for Premium members). */
+const PORTAL     = window.ADELANI_MODE === "portal";
+const PORTAL_URL = (window.ADELANI_PORTAL_URL || "https://adelani-si.portals.com.ng").replace(/\/$/,"");
+const FREE_URL   = (window.ADELANI_FREE_URL || "https://mikeade3000.github.io/Adelani-Chat-AI").replace(/\/$/,"");
+if(PORTAL) document.title="Adelani AI · Premium Portal";
+const REGISTERED_PARAM = (()=>{ try{ return new URLSearchParams(location.search).get("registered"); }catch{ return null; } })();
 /* Model tiers. The actual OpenRouter models (with fallbacks) are chosen by the
    backend — see MODEL_TIERS in server.js, or set CHAT_MODELS / HEAVY_MODELS /
    GRACE_MODELS / VISION_MODELS on Render to change them without a redeploy here. */
@@ -180,6 +192,17 @@ const HEAVY_MODEL = "heavy"; // registered-user full Scholar articles
 const GRACE_MODEL = "grace"; // Grace's slides & graphics — falls back to HEAVY_MODEL
 const DAILY_LIMIT = 10;
 const WA_LINK     = "https://wa.me/2348115800375?text=" + encodeURIComponent("Hello Dr. Adewusi, I'd like to upgrade to Adelani AI Premium.");
+/* Premium promo plans — paid via WhatsApp, granted by the admin in the Admin Panel. */
+const PLANS = [
+  {id:"premium5",  days:5,  price:"₦2,000", label:"5 days"},
+  {id:"premium10", days:10, price:"₦3,000", label:"10 days", best:true},
+];
+const waPlan = (plan,username) => "https://wa.me/2348115800375?text=" + encodeURIComponent(
+  `Hello Dr. Adewusi, I'd like the ${plan.days}-day Adelani AI Premium (${plan.price}).`+(username?` My username is ${username}.`:" My username is: "));
+/* Premium is active for the admin, or until the user's premiumUntil time. */
+const isPremiumUser = u => !!u && (u.role==="admin" || (!!u.premium && (!u.premiumUntil || u.premiumUntil>Date.now())));
+const PREMIUM_PERKS = ["Unlimited messages every day","Our strongest AI models","Longer answers & longer memory","Unlimited Grace presentations","Unlimited Nexus live searches"];
+const fmtUntil = ms => new Date(ms).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
 
 /* ══════════ HELPERS ══════════ */
 const ls = {
@@ -311,8 +334,8 @@ async function streamChat(payload,onDelta,meta){
 /* Only the recent conversation goes to the AI — fewer tokens means faster, cheaper
    answers. Images are kept only for the latest messages; older ones become a note. */
 const MAX_HISTORY=12, MAX_CHARS_PER_MSG=12000;
-function trimHistory(msgs){
-  const recent=msgs.slice(-MAX_HISTORY);
+function trimHistory(msgs,max){
+  const recent=msgs.slice(-(max||MAX_HISTORY));
   return recent.map((m,i)=>{
     const content=(m.content||"").length>MAX_CHARS_PER_MSG&&i<recent.length-1
       ? m.content.slice(0,MAX_CHARS_PER_MSG)+"\n…[earlier text shortened]"
@@ -1086,6 +1109,59 @@ function WhatsNewModal({t,dark,onClose}){
   );
 }
 
+/* ══════════ PREMIUM PLANS (sign-in page + upgrade windows) ══════════ */
+function PremiumPlans({t,dark,username,compact}){
+  return(
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:12}}>
+        {PLANS.map(pl=>(
+          <a key={pl.id} href={waPlan(pl,username)} target="_blank" rel="noopener noreferrer"
+            style={{flex:1,position:"relative",textDecoration:"none",color:t.text,background:pl.best?(dark?"#241A12":"#FBF3E2"):t.card,border:`1.5px solid ${pl.best?t.gold:t.border}`,borderRadius:8,padding:compact?"12px 8px":"16px 10px",textAlign:"center",boxShadow:pl.best?"0 6px 18px rgba(176,141,60,.18)":"none"}}>
+            {pl.best&&<span style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",background:"#7A2232",color:"#F3DFA8",fontSize:10.5,letterSpacing:"1.5px",padding:"2px 8px",borderRadius:3,whiteSpace:"nowrap",border:`1px solid ${t.gold}`}}>BEST VALUE</span>}
+            <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:compact?26:32,color:"#7A2232",lineHeight:1.1,filter:dark?"brightness(1.6)":"none"}}>{pl.price}</div>
+            <div style={{fontSize:15,color:t.muted,fontStyle:"italic"}}>{pl.label} of Premium</div>
+            <div style={{marginTop:8,fontSize:13.5,fontWeight:600,color:"#128C7E"}}>Choose on WhatsApp →</div>
+          </a>
+        ))}
+      </div>
+      {!compact&&<ul style={{listStyle:"none",padding:0,margin:"0 0 12px",textAlign:"left",fontSize:15,color:t.text}}>
+        {PREMIUM_PERKS.map(x=><li key={x} style={{display:"flex",gap:8,margin:"4px 0"}}><span style={{color:t.gold}}>✦</span>{x}</li>)}
+      </ul>}
+      <div style={{fontSize:13,color:t.muted,fontStyle:"italic",textAlign:"center"}}>Promo prices · paid via WhatsApp · activated by our team · no auto-renewal · <a href="./policies.html#premium" target="_blank" rel="noopener noreferrer" style={{color:t.muted}}>terms</a></div>
+    </div>
+  );
+}
+
+/* ══════════ PREMIUM PORTAL GATE ══════════
+   On the Premium Portal, signed-in users without active Premium see this screen. */
+function PremiumGate({t,dark,user,onCheck,onLogout}){
+  const [checking,setChecking]=useState(false);
+  const [note,setNote]=useState("");
+  const ended=!!user.premiumUntil&&user.premiumUntil<=Date.now();
+  const check=async()=>{ setChecking(true); setNote(""); const ok=await onCheck(); setChecking(false); if(!ok) setNote("Premium isn't active on your account yet. If you've paid, we'll activate it shortly — you'll get an email."); };
+  return(
+    <div style={{height:"100%",overflowY:"auto",background:t.bg,display:"flex",justifyContent:"center",padding:20}}>
+      <div style={{width:"100%",maxWidth:520,margin:"auto 0",textAlign:"center"}}>
+        <div style={{display:"inline-flex",marginBottom:18}}><Emblem icon="A" back={"\u265B\uFE0E"} letter color="#7A2232" size={84} mode="flip" ring={5} ringBg={t.bg} float/></div>
+        <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:40,lineHeight:1.05,color:t.text}}>Adelani <span style={{color:t.gold}}>Premium Portal</span></div>
+        <div style={{color:t.gold,fontSize:15,letterSpacing:"6px",margin:"8px 0"}}>— ❦ —</div>
+        <div style={{fontSize:17,color:t.text,lineHeight:1.6,marginBottom:20}}>
+          Welcome, <strong>{user.username}</strong>. {ended?"Your Premium has ended — renew to continue enjoying the portal.":"Your account is active. This portal is reserved for Premium members — choose a plan to unlock everything."}
+        </div>
+        <div style={{background:t.card,border:`1px solid ${t.border}`,borderTop:"3px solid #7A2232",borderRadius:8,padding:"22px 20px",textAlign:"left",boxShadow:dark?"0 20px 50px rgba(0,0,0,.4)":"0 20px 50px rgba(60,40,10,.10)"}}>
+          <PremiumPlans t={t} dark={dark} username={user.username}/>
+        </div>
+        <button onClick={check} disabled={checking} style={{marginTop:18,width:"100%",padding:"13px",borderRadius:6,background:"linear-gradient(135deg,#7A2232,#561520)",border:`1px solid ${t.gold}`,color:"#FFFBF2",fontFamily:SERIF,fontWeight:600,fontSize:16.5,opacity:checking?.6:1}}>{checking?"Checking…":"I've paid — check my Premium status"}</button>
+        {note&&<div style={{marginTop:10,fontSize:14.5,color:t.text,fontStyle:"italic"}}>{note}</div>}
+        <div style={{display:"flex",gap:10,marginTop:14}}>
+          <a href={FREE_URL} style={{flex:1,padding:"11px",borderRadius:6,border:`1px solid ${t.border}`,color:t.muted,fontSize:15,textDecoration:"none"}}>Use the free version</a>
+          <button onClick={onLogout} style={{flex:1,padding:"11px",borderRadius:6,border:`1px solid ${t.border}`,color:t.muted,fontSize:15,background:"transparent"}}>Sign out</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════ PRESENTATION LIMIT MODAL ══════════ */
 function DeckLimitModal({t,dark,onClose,kind}){
   const search=kind==="search";
@@ -1097,7 +1173,7 @@ function DeckLimitModal({t,dark,onClose,kind}){
         <div style={{color:t.muted,fontSize:16,lineHeight:1.6,marginBottom:18}}>{search
           ?<>Free accounts get <strong style={{color:t.text}}>{FREE_SEARCHES} live web searches a day</strong> with Nexus. Premium members get <strong style={{color:t.gold}}>unlimited</strong> searches.</>
           :<>Free accounts can create <strong style={{color:t.text}}>{FREE_DECKS} presentations a day</strong>. Premium members get <strong style={{color:t.gold}}>unlimited</strong> studio-quality decks.</>}</div>
-        <a href={WA_LINK} target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"13px",borderRadius:6,background:"linear-gradient(135deg,#7A2232,#561520)",border:`1px solid ${t.gold}`,color:"#FFFBF2",fontFamily:SERIF,fontWeight:600,fontSize:16.5,textDecoration:"none",marginBottom:10}}>⭐ Get Premium on WhatsApp</a>
+        <div style={{marginBottom:12}}><PremiumPlans t={t} dark={dark} username={(ls.get("adl-ses")||{}).username} compact/></div>
         <button onClick={onClose} style={{width:"100%",padding:"11px",borderRadius:6,border:`1px solid ${t.border}`,color:t.muted,fontSize:15,background:"transparent",cursor:"pointer"}}>Maybe later</button>
         <div style={{marginTop:12,fontSize:13,color:t.muted,fontStyle:"italic"}}>{search?"Resets every day at midnight (Nigeria time). The other agents stay available.":"Resets every day at midnight (Nigeria time). Graphics stay available."}</div>
       </div>
@@ -1116,17 +1192,8 @@ function LimitModal({t,dark,onClose}){
           <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:21,color:t.text,marginBottom:8}}>Daily Limit Reached</div>
           <div style={{color:t.muted,fontSize:14.5,lineHeight:1.65}}>You've used your <strong style={{color:"#7A2232"}}>10 free daily messages</strong>. Upgrade to Premium for unlimited access.</div>
         </div>
-        <div style={{padding:"20px 24px 24px"}}>
-          <div style={{background:"rgba(37,211,102,.07)",border:"1.5px solid rgba(37,211,102,.28)",borderRadius:14,padding:"16px",marginBottom:16,textAlign:"center"}}>
-            <div style={{fontSize:12,color:t.muted,letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Contact for Premium</div>
-            <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:16,color:t.text,marginBottom:4}}>Dr. Michael Adelani Adewusi</div>
-            <div style={{fontSize:15.5,color:"#7A2232",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
-          </div>
-          <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
-            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:15.5,textDecoration:"none",marginBottom:10}}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-            Get Premium on WhatsApp →
-          </a>
+        <div style={{padding:"22px 24px 24px"}}>
+          <div style={{marginBottom:14}}><PremiumPlans t={t} dark={dark} username={(ls.get("adl-ses")||{}).username} compact/></div>
           <button onPointerDown={onClose} style={{width:"100%",padding:"11px",borderRadius:12,border:`1px solid ${t.border}`,color:t.muted,fontSize:14,cursor:"pointer",background:"transparent"}}>Maybe Later</button>
           <div style={{textAlign:"center",marginTop:12,fontSize:12.5,color:t.muted}}>🔄 Resets daily · <span style={{color:"#7A2232",fontWeight:600}}>Premium = Unlimited</span></div>
         </div>
@@ -1211,7 +1278,7 @@ function Sidebar({t,dark,agent,agents,user,isGuest,onSwitch,onAdmin,onLogout}){
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:600,fontSize:14,color:t.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isGuest?"Guest User":user?.username}</div>
-            <div style={{fontSize:11,color:user?.premium?t.gold:t.muted,marginTop:1}}>{user?.role==="admin"?"⚙ Administrator":user?.premium?"⭐ Premium member":"✦ Adelani AI"}</div>
+            <div style={{fontSize:11,color:isPremiumUser(user)?t.gold:t.muted,marginTop:1}}>{user?.role==="admin"?"⚙ Administrator":isPremiumUser(user)?("⭐ Premium"+(user.premiumUntil?" · until "+fmtUntil(user.premiumUntil):" member")):user?.premium?"Premium ended — renew":"✦ Adelani AI"}</div>
           </div>
           {user?.role==="admin"&&<button onPointerDown={onAdmin} style={{padding:"3px 8px",borderRadius:7,background:"rgba(122,34,50,.12)",border:"1px solid rgba(122,34,50,.3)",color:"#7A2232",fontSize:12,fontWeight:700,cursor:"pointer"}}>⚙</button>}
         </div>
@@ -1240,9 +1307,35 @@ function Sidebar({t,dark,agent,agents,user,isGuest,onSwitch,onAdmin,onLogout}){
 
 /* ══════════ AUTH SCREEN ══════════ */
 function AuthScreen({onAuth,onGuest,t,dark}){
-  const [tab,setTab]=useState("guest");
+  const [tab,setTab]=useState(REGISTERED_PARAM?"register":(PORTAL?"login":"guest"));
   const [u,setU]=useState("");const [p,setP]=useState("");
   const [err,setErr]=useState("");const [busy,setBusy]=useState(false);
+  const [reg,setReg]=useState({username:"",email:"",password:"",confirm:"",accept:false});
+  const [regDone,setRegDone]=useState(REGISTERED_PARAM?{username:REGISTERED_PARAM,email:null,arrived:true}:null);
+  const [redirectIn,setRedirectIn]=useState(null);
+  /* Free site: after registering, take the user to the Premium Portal. */
+  useEffect(()=>{
+    if(redirectIn===null) return;
+    if(redirectIn<=0){ location.href=PORTAL_URL+"/?registered="+encodeURIComponent(regDone.username); return; }
+    const tm=setTimeout(()=>setRedirectIn(n=>n-1),1000); return()=>clearTimeout(tm);
+  },[redirectIn]);
+  const register=async()=>{
+    setErr("");
+    const r0=reg;
+    if(!/^[A-Za-z0-9_.-]{3,32}$/.test(r0.username)) return setErr("Username: 3–32 letters, numbers, dots, dashes or underscores (no spaces).");
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(r0.email.trim())) return setErr("Please enter a valid email address — we'll email you when your account is activated.");
+    if(r0.password.length<6) return setErr("Password must be at least 6 characters.");
+    if(r0.password!==r0.confirm) return setErr("The two passwords don't match.");
+    if(!r0.accept) return setErr("Please accept the Terms of Use and Privacy Policy.");
+    setBusy(true);
+    try{
+      const r=await fetch(BACKEND+"/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:r0.username,email:r0.email.trim(),password:r0.password,acceptTerms:true})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok){ setErr(d.error||"Registration failed. Please try again."); }
+      else { setRegDone({username:r0.username,email:r0.email.trim()}); setU(r0.username); if(!PORTAL) setRedirectIn(6); }
+    }catch(e){ setErr("Cannot reach the server. Please check your connection."); }
+    setBusy(false);
+  };
   const login=async()=>{
     setErr("");setBusy(true);
     try{
@@ -1253,7 +1346,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
     }catch(e){setErr("Cannot reach server.");}
     setBusy(false);
   };
-  const tS=id=>({flex:1,padding:"14px 0",background:"transparent",border:"none",borderBottom:`2px solid ${tab===id?t.gold:"transparent"}`,color:tab===id?t.text:t.muted,fontFamily:SERIF,fontWeight:600,fontSize:14,letterSpacing:"2px",textTransform:"uppercase",cursor:"pointer",transition:"all .2s"});
+  const tS=id=>({flex:1,padding:"13px 2px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===id?t.gold:"transparent"}`,color:tab===id?t.text:t.muted,fontFamily:SERIF,fontWeight:600,fontSize:12.5,letterSpacing:"1px",textTransform:"uppercase",lineHeight:1.2,cursor:"pointer",transition:"all .2s"});
   const inp={width:"100%",padding:"13px 15px",borderRadius:6,background:t.inp,border:`1px solid ${t.border}`,color:t.text,fontSize:15,fontFamily:"'EB Garamond','Times New Roman',serif",marginBottom:11};
   const bigBtn={width:"100%",padding:"14px",borderRadius:6,background:"linear-gradient(135deg,#7A2232,#561520)",border:`1px solid ${t.gold}`,color:"#FFFBF2",fontFamily:SERIF,fontWeight:600,fontSize:17,letterSpacing:".5px",cursor:"pointer",boxShadow:"0 6px 20px rgba(122,34,50,.28)"};
   return(
@@ -1265,7 +1358,7 @@ function AuthScreen({onAuth,onGuest,t,dark}){
           <div style={{display:"inline-flex",marginBottom:20}}><Emblem icon="A" back={"\u265B\uFE0E"} letter color="#7A2232" size={88} mode="flip" ring={5} ringBg={t.bg} float/></div>
           <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:46,lineHeight:1,color:t.text,letterSpacing:".3px"}}>Adelani <span style={{color:t.gold}}>AI</span></div>
           <div style={{color:t.gold,fontSize:15,letterSpacing:"6px",margin:"8px 0 4px"}}>— ❦ —</div>
-          <div style={{color:t.muted,fontSize:13,letterSpacing:"3px",textTransform:"uppercase"}}>Multi-Agent Platform</div>
+          <div style={{color:PORTAL?t.gold:t.muted,fontSize:13,letterSpacing:"3px",textTransform:"uppercase"}}>{PORTAL?"⭐ Premium Portal":"Multi-Agent Platform"}</div>
         </div>
         <div style={{display:"flex",gap:"6px 14px",justifyContent:"center",flexWrap:"wrap",marginBottom:22,padding:"0 6px"}}>
           {AGENTS.map((a,i)=>(
@@ -1277,9 +1370,9 @@ function AuthScreen({onAuth,onGuest,t,dark}){
         </div>
         <div style={{background:t.card,borderRadius:8,border:`1px solid ${t.border}`,borderTop:`3px solid #7A2232`,overflow:"hidden",boxShadow:dark?"0 20px 60px rgba(0,0,0,.4)":"0 20px 50px rgba(60,40,10,.10)"}}>
           <div style={{display:"flex",borderBottom:`1px solid ${t.border}`,background:t.surf}}>
-            {["guest","login","premium"].map(id=>(
+            {(PORTAL?["login","register","premium"]:["guest","login","register","premium"]).map(id=>(
               <button key={id} onPointerDown={()=>{setTab(id);setErr("");}} style={tS(id)}>
-                {id==="guest"?"Guest":id==="login"?"Sign In":"Premium"}
+                {id==="guest"?"Guest":id==="login"?"Sign In":id==="register"?"Create account":"⭐ Premium"}
               </button>
             ))}
           </div>
@@ -1300,23 +1393,49 @@ function AuthScreen({onAuth,onGuest,t,dark}){
                 <button onPointerDown={!busy?login:undefined} style={{...bigBtn,opacity:busy?.6:1}}>
                   {busy?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><Spinner color="#FFF"/>Signing in...</span>:"Sign In →"}
                 </button>
+                <div style={{textAlign:"center",marginTop:14,fontSize:15,color:t.muted}}>New here? <button onPointerDown={()=>{setTab("register");setErr("");}} style={{color:"#7A2232",fontWeight:600,textDecoration:"underline",fontSize:15,filter:dark?"brightness(1.6)":"none"}}>Create an account</button></div>
               </div>
             )}
+            {tab==="register"&&(regDone?(
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:44,marginBottom:6}}>✉️</div>
+                <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:28,color:t.text,marginBottom:8}}>Registration received</div>
+                <div style={{color:t.text,fontSize:16,lineHeight:1.65,marginBottom:12}}>{regDone.arrived?"Welcome to the Adelani Premium Portal":"Thank you"}, <strong>{regDone.username}</strong>! Our team will review and activate your account. We'll email {regDone.email?<strong>{regDone.email}</strong>:"you"} the moment it's ready, together with our policies.</div>
+                <div style={{color:t.muted,fontSize:14,fontStyle:"italic",marginBottom:18}}>Can't find the email? Check your spam or promotions folder.{PORTAL?" Once activated, sign in right here.":""}</div>
+                {!PORTAL&&redirectIn!==null&&<div style={{padding:"12px 14px",borderRadius:6,border:`1px solid ${t.gold}`,background:dark?"#241A12":"#FBF3E2",marginBottom:14,fontSize:15,color:t.text}}>
+                  Taking you to the <strong>Adelani Premium Portal</strong> in {Math.max(redirectIn,0)}s…
+                  <a href={PORTAL_URL+"/?registered="+encodeURIComponent(regDone.username)} style={{display:"block",marginTop:6,color:"#7A2232",fontWeight:600,filter:dark?"brightness(1.6)":"none"}}>Go now → {PORTAL_URL.replace(/^https?:\/\//,"")}</a>
+                  <button onPointerDown={()=>setRedirectIn(null)} style={{marginTop:6,fontSize:13,color:t.muted,textDecoration:"underline"}}>Stay here instead</button>
+                </div>}
+                {PORTAL
+                  ?<button onPointerDown={()=>{setTab("login");setRegDone(null);}} style={bigBtn}>Go to Sign in →</button>
+                  :<button onPointerDown={onGuest} style={bigBtn}>Explore as Guest meanwhile →</button>}
+                <button onPointerDown={()=>{setTab("premium");}} style={{width:"100%",marginTop:10,padding:"11px",borderRadius:6,border:`1px solid ${t.gold}`,color:t.text,fontSize:15,background:"transparent"}}>⭐ See Premium plans</button>
+              </div>
+            ):(
+              <div>
+                <input value={reg.username} onChange={e=>setReg({...reg,username:e.target.value.trim()})} placeholder="Choose a username" autoComplete="username" style={inp}/>
+                <input type="email" value={reg.email} onChange={e=>setReg({...reg,email:e.target.value})} placeholder="Email address" autoComplete="email" style={inp}/>
+                <input type="password" value={reg.password} onChange={e=>setReg({...reg,password:e.target.value})} placeholder="Password (at least 6 characters)" autoComplete="new-password" style={inp}/>
+                <input type="password" value={reg.confirm} onChange={e=>setReg({...reg,confirm:e.target.value})} placeholder="Confirm password" autoComplete="new-password" onKeyDown={e=>e.key==="Enter"&&!busy&&register()} style={inp}/>
+                <label style={{display:"flex",alignItems:"flex-start",gap:9,fontSize:14.5,color:t.text,margin:"4px 0 14px",lineHeight:1.5,cursor:"pointer"}}>
+                  <input type="checkbox" checked={reg.accept} onChange={e=>setReg({...reg,accept:e.target.checked})} style={{marginTop:4,width:16,height:16,accentColor:"#7A2232"}}/>
+                  <span>I agree to the <a href="./policies.html#terms" target="_blank" rel="noopener noreferrer" style={{color:"#7A2232",filter:dark?"brightness(1.6)":"none"}}>Terms of Use</a>, <a href="./policies.html#privacy" target="_blank" rel="noopener noreferrer" style={{color:"#7A2232",filter:dark?"brightness(1.6)":"none"}}>Privacy Policy</a> and <a href="./policies.html#ai" target="_blank" rel="noopener noreferrer" style={{color:"#7A2232",filter:dark?"brightness(1.6)":"none"}}>AI Disclaimer</a>.</span>
+                </label>
+                {err&&<div style={{color:"#7A2232",fontSize:13.5,marginBottom:12,padding:"10px 13px",borderRadius:6,background:"rgba(192,57,43,.08)",border:"1px solid rgba(192,57,43,.2)"}}>{err}</div>}
+                <button onPointerDown={!busy?register:undefined} style={{...bigBtn,opacity:busy?.6:1}}>
+                  {busy?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><Spinner color="#FFF"/>Creating account...</span>:"Create account →"}
+                </button>
+                <div style={{color:t.muted,fontSize:13.5,marginTop:12,textAlign:"center",fontStyle:"italic"}}>New accounts are activated by our team — we'll email you when yours is ready.</div>
+              </div>
+            ))}
             {tab==="premium"&&(
               <div style={{textAlign:"center"}}>
-                <div style={{fontSize:50,marginBottom:14}}>⭐</div>
-                <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:20,color:t.text,marginBottom:9}}>Adelani Premium</div>
-                <div style={{color:t.muted,fontSize:14.5,lineHeight:1.7,marginBottom:20}}>Unlimited messages · All 7 agents<br/>Priority AI · No daily limits.</div>
-                <div style={{background:"rgba(37,211,102,.07)",border:"1.5px solid rgba(37,211,102,.28)",borderRadius:15,padding:"18px",marginBottom:18,textAlign:"center"}}>
-                  <div style={{fontSize:11.5,color:t.muted,letterSpacing:"1.5px",textTransform:"uppercase",fontWeight:700,marginBottom:9}}>Contact to Upgrade</div>
-                  <div style={{fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:16.5,color:t.text,marginBottom:5}}>Dr. Michael Adelani Adewusi</div>
-                  <div style={{fontSize:16,color:"#7A2232",fontWeight:700}}>WhatsApp: +234 811 580 0375</div>
-                </div>
-                <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
-                  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,width:"100%",padding:"14px",borderRadius:13,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"#fff",fontFamily:"'EB Garamond','Times New Roman',serif",fontWeight:800,fontSize:15.5,textDecoration:"none"}}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                  Get Premium on WhatsApp →
-                </a>
+                <div style={{fontFamily:DISPLAY,fontWeight:700,fontSize:30,color:t.text,margin:"0 0 4px"}}>Adelani <em style={{color:t.gold}}>Premium</em></div>
+                <div style={{color:t.muted,fontSize:15,fontStyle:"italic",marginBottom:18}}>The best of Adelani AI — promo prices</div>
+                <PremiumPlans t={t} dark={dark} username={reg.username||u}/>
+                <div style={{fontSize:14,color:t.text,marginTop:14,lineHeight:1.6}}>How it works: <strong>create an account</strong> → pay via WhatsApp → we activate Premium and email you the end date.</div>
+                {!PORTAL&&<a href={PORTAL_URL} style={{display:"block",marginTop:12,fontSize:15,color:"#7A2232",fontWeight:600,filter:dark?"brightness(1.6)":"none"}}>Premium members: open the Premium Portal → {PORTAL_URL.replace(/^https?:\/\//,"")}</a>}
               </div>
             )}
           </div>
@@ -1371,8 +1490,9 @@ function AdminPanel({onBack,t,dark,toggleTheme}){
               </div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                 <span style={{padding:"3px 8px",borderRadius:20,fontSize:12,fontWeight:700,background:u.activated?"rgba(39,174,96,.12)":"rgba(230,126,34,.12)",color:u.activated?"#27AE60":"#E67E22",border:`1px solid ${u.activated?"rgba(39,174,96,.28)":"rgba(230,126,34,.28)"}`}}>{u.activated?"✓ Active":"⏳ Pending"}</span>
-                {u.premium&&<span style={{padding:"3px 8px",borderRadius:20,fontSize:12,fontWeight:700,background:"rgba(176,141,60,.14)",color:"#8A6A20",border:"1px solid rgba(176,141,60,.4)"}}>⭐ Premium</span>}
-                <button onPointerDown={()=>act(u.username,u.premium?"unpremium":"premium")} title={u.premium?"Remove Premium (back to 3 presentations a day)":"Give Premium (unlimited presentations)"} style={{padding:"5px 11px",borderRadius:7,background:u.premium?t.inp:"rgba(176,141,60,.12)",border:"1px solid rgba(176,141,60,.4)",color:"#8A6A20",fontSize:12,fontWeight:600,cursor:"pointer"}}>{u.premium?"Remove ⭐":"Make ⭐ Premium"}</button>
+                {u.premium&&<span title={u.premiumUntil?"Premium until "+new Date(u.premiumUntil).toLocaleString():"Premium (no end date)"} style={{padding:"3px 8px",borderRadius:20,fontSize:12,fontWeight:700,background:"rgba(176,141,60,.14)",color:"#8A6A20",border:"1px solid rgba(176,141,60,.4)"}}>⭐ {u.premiumUntil?"until "+fmtUntil(u.premiumUntil):"Premium"}</span>}
+                {PLANS.map(pl=><button key={pl.id} onPointerDown={()=>{ if(window.confirm(`Give ${u.username} ${pl.days} days of Premium (${pl.price})?${u.premium?" The days are added to their remaining time.":""} They'll get a confirmation email.`)) act(u.username,pl.id); }} title={`Payment of ${pl.price} received → add ${pl.days} days`} style={{padding:"5px 10px",borderRadius:7,background:"rgba(176,141,60,.12)",border:"1px solid rgba(176,141,60,.4)",color:"#8A6A20",fontSize:12,fontWeight:600,cursor:"pointer"}}>⭐ +{pl.days} days ({pl.price})</button>)}
+                {u.premium&&<button onPointerDown={()=>{ if(window.confirm(`Remove Premium from ${u.username}?`)) act(u.username,"unpremium"); }} style={{padding:"5px 10px",borderRadius:7,background:t.inp,border:"1px solid rgba(176,141,60,.4)",color:"#8A6A20",fontSize:12,cursor:"pointer"}}>Remove ⭐</button>}
                 {!u.activated&&<button onPointerDown={()=>act(u.username,"activate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(39,174,96,.12)",border:"1px solid rgba(39,174,96,.3)",color:"#7A2232",fontSize:12,fontWeight:600,cursor:"pointer"}}>Activate</button>}
                 {u.activated&&<button onPointerDown={()=>act(u.username,"deactivate")} style={{padding:"5px 11px",borderRadius:7,background:"rgba(230,126,34,.1)",border:"1px solid rgba(230,126,34,.3)",color:"#7A2232",fontSize:12,cursor:"pointer"}}>Revoke</button>}
                 <button onPointerDown={()=>act(u.username,u.banned?"unban":"ban")} style={{padding:"5px 11px",borderRadius:7,background:u.banned?"rgba(39,174,96,.1)":"rgba(192,57,43,.1)",border:`1px solid ${u.banned?"rgba(39,174,96,.3)":"rgba(192,57,43,.3)"}`,color:u.banned?"#27AE60":"#C0392B",fontSize:12,cursor:"pointer"}}>{u.banned?"Restore":"Suspend"}</button>
@@ -1489,6 +1609,15 @@ function App(){
   useEffect(()=>{if(!msgs.length||busy)return;const k=user?`adl-m-${user.id}-${agent.id}`:`adl-gm-${agent.id}`;ls.set(k,msgs.slice(-80));},[msgs,busy,agent.id,user?.id]);
   useEffect(()=>{botRef.current?.scrollIntoView({behavior:busy?"auto":"smooth"});},[msgs,busy]);
 
+  useEffect(()=>{
+    if(!user||user.role==="admin"||!user.sessionToken) return;
+    const refresh=async()=>{ const q=await fetchDeckQuota(user); if(!q) return;
+      if(!!q.premium!==!!(user.premium&&isPremiumUser(user))||(q.premiumUntil||null)!==(user.premiumUntil||null)){
+        const nu={...user,premium:!!q.premium,premiumUntil:q.premiumUntil||null}; setUser(nu);
+        const ses=ls.get("adl-ses"); if(ses) ls.set("adl-ses",{...ses,premium:nu.premium,premiumUntil:nu.premiumUntil});
+      } };
+    refresh(); const iv=setInterval(refresh,300000); return()=>clearInterval(iv);
+  },[user?.username,user?.sessionToken]);
   useEffect(()=>{ if(!agent.design&&!agent.web) return; (async()=>{ const q=await fetchDeckQuota(ls.get("adl-ses")||{}); if(q){ setDecksLeft(q.unlimited?null:q.decksLeft); setSearchesLeft(q.unlimited||typeof q.searchesLeft!=="number"?null:q.searchesLeft); } })(); },[agent.id,user?.id]);
   const toggleTheme=()=>{const n=dark?"light":"dark";setTheme(n);ls.set("adl-theme",n);};
   const showT=m=>{setToast(m);setTimeout(()=>setToast(""),2800);};
@@ -1524,7 +1653,7 @@ function App(){
     setConvs(p=>({...p,[agent.id]:hist}));
     setInput("");setAttachment(null);setBusy(true);
     if(taRef.current)taRef.current.style.height="auto";
-    if(user?.role!=="admin")bumpUsage();
+    if(!isPremiumUser(user))bumpUsage();
 
     const push=(content,design)=>setConvs(p=>({...p,[agent.id]:[...hist,{role:"assistant",content,design,timestamp:new Date().toISOString()}]}));
     push("🎨 Designing… this can take a moment.",null);
@@ -1614,7 +1743,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
     const text=(typeof override==="string"?override:(input||"")).trim();
     if(!text&&!attachment)return;
     if(busy)return;
-    if(user?.role!=="admin"&&limitHit()){setShowLimit(true);return;}
+    if(!isPremiumUser(user)&&limitHit()){setShowLimit(true);return;}
 
     /* Studio design agent uses its own generation flow */
     if(agent.design){ await handleDesign(text,attachment); return; }
@@ -1645,10 +1774,10 @@ If source material is provided, build the deck from it. Output JSON only.`;
     setConvs(p=>({...p,[agent.id]:hist}));
     setInput("");setAttachment(null);setBusy(true);
     if(taRef.current)taRef.current.style.height="auto";
-    if(user?.role!=="admin")bumpUsage();
+    if(!isPremiumUser(user))bumpUsage();
 
     /* Build API messages — recent history only, for speed */
-    const apiMessages=trimHistory(hist);
+    const apiMessages=trimHistory(hist,isPremiumUser(user)?24:MAX_HISTORY);
 
     const ses=ls.get("adl-ses")||{};
     const today=new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
@@ -1684,7 +1813,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
   /* ── REVIEW ARTICLE GENERATION ── */
   const genReview=useCallback(async(cfg)=>{
     setShowReview(false);
-    if(user?.role!=="admin"&&limitHit()){setShowLimit(true);return;}
+    if(!isPremiumUser(user)&&limitHit()){setShowLimit(true);return;}
     const sch=AGENTS.find(a=>a.id==="scholar");
     const isReg=!!user&&!isGuest;
     setLastReviewCfg(isReg?cfg:null);
@@ -1696,7 +1825,7 @@ If source material is provided, build the deck from it. Output JSON only.`;
     ls.set(key,hist.slice(-80));
     setConvs(p=>({...p,scholar:hist}));
     setBusy(true);
-    if(user?.role!=="admin")bumpUsage();
+    if(!isPremiumUser(user))bumpUsage();
     const ses=ls.get("adl-ses")||{};
     const sys=buildReviewSystem(cfg,isReg?"full":"preview");
     const ts=new Date().toISOString();
@@ -1710,13 +1839,13 @@ If source material is provided, build the deck from it. Output JSON only.`;
 
   const continueReview=useCallback(async()=>{
     if(!lastReviewCfg)return;
-    if(user?.role!=="admin"&&limitHit()){setShowLimit(true);return;}
+    if(!isPremiumUser(user)&&limitHit()){setShowLimit(true);return;}
     const key=user?`adl-m-${user.id}-scholar`:`adl-gm-scholar`;
     const base=ls.get(key)||[];
     const apiMsgs=base.slice(-6).map(m=>({role:m.role,content:(m.content||"").replace(/^📝 /,"")}));
     apiMsgs.push({role:"user",content:"Continue the review article from exactly where it stopped. Do not repeat any earlier text or headings."});
     setBusy(true);
-    if(user?.role!=="admin")bumpUsage();
+    if(!isPremiumUser(user))bumpUsage();
     const ses=ls.get("adl-ses")||{};
     const sys=buildReviewSystem(lastReviewCfg,"full");
     const ts=new Date().toISOString();
@@ -1767,6 +1896,12 @@ If source material is provided, build the deck from it. Output JSON only.`;
   );
   if(view==="auth")  return <AuthScreen onAuth={u=>{setUser(u);setGuest(false);setView("chat");setEntered(Date.now());}} onGuest={()=>{setGuest(true);setView("chat");setEntered(Date.now());}} t={t} dark={dark}/>;
   if(view==="admin") return <AdminPanel onBack={()=>setView("chat")} t={t} dark={dark} toggleTheme={toggleTheme}/>;
+  if(PORTAL&&(isGuest||!user)) { setTimeout(logout,0); return null; }   // no guest access on the portal
+  if(PORTAL&&!isPremiumUser(user)) return <PremiumGate t={t} dark={dark} user={user} onLogout={logout}
+    onCheck={async()=>{ const q=await fetchDeckQuota(user); if(!q) return false;
+      const nu={...user,premium:!!q.premium,premiumUntil:q.premiumUntil||null}; setUser(nu);
+      const ses=ls.get("adl-ses"); if(ses) ls.set("adl-ses",{...ses,premium:nu.premium,premiumUntil:nu.premiumUntil});
+      return !!q.premium; }}/>;
 
   return(
     <>
@@ -1818,6 +1953,18 @@ If source material is provided, build the deck from it. Output JSON only.`;
             {!mobile&&<button onPointerDown={clearChat} style={{height:36,padding:"0 12px",borderRadius:9,background:t.inp,border:`1px solid ${t.border}`,color:t.muted,fontSize:13,cursor:"pointer"}}>Clear</button>}
           </div>
         </div>
+
+        {/* Free site: Premium members belong on the Premium Portal */}
+        {!PORTAL&&user&&user.role!=="admin"&&isPremiumUser(user)&&<div style={{padding:"7px 14px",background:"rgba(176,141,60,.14)",borderBottom:`1px solid ${t.border}`,fontSize:14,color:t.text,flexShrink:0}}>
+          ⭐ You're a Premium member — enjoy the full experience on the <a href={PORTAL_URL} style={{color:"#7A2232",fontWeight:600,filter:dark?"brightness(1.6)":"none"}}>Adelani Premium Portal →</a>
+        </div>}
+        {/* Premium ending / ended reminder */}
+        {user&&user.role!=="admin"&&user.premiumUntil&&(()=>{ const left=user.premiumUntil-Date.now(); if(left>36*3600000) return null;
+          const ended=left<=0; const hrs=Math.max(1,Math.round(left/3600000));
+          return <div style={{padding:"7px 14px",background:ended?"rgba(122,34,50,.10)":"rgba(176,141,60,.14)",borderBottom:`1px solid ${t.border}`,fontSize:14,color:t.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",flexShrink:0}}>
+            <span>⭐ {ended?"Your Premium has ended.":`Your Premium ends in about ${hrs} hour${hrs>1?"s":""}.`}</span>
+            <a href={waPlan(PLANS[1],user.username)} target="_blank" rel="noopener noreferrer" style={{color:"#7A2232",fontWeight:600,filter:dark?"brightness(1.6)":"none"}}>Renew on WhatsApp — 10 days ₦3,000 →</a>
+          </div>; })()}
 
         {/* Mobile agent strip */}
         {mobile&&(

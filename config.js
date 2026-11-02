@@ -1,6 +1,9 @@
-/* ══════════ ADELANI AI — BACKEND ADDRESS ══════════
-   The ONE place to set where the backend lives. Used by index.html (the chat app)
-   and taskpane.html (the Office add-in).
-   After `npx wrangler deploy`, paste the URL it prints here, e.g.
-   "https://adelani-ai-backend.YOUR-NAME.workers.dev"  (no slash at the end). */
-window.ADELANI_BACKEND = "https://adelani-ai-backend.mikeade3000.workers.dev";
+/* ══════════ ADELANI AI — SITE SETTINGS ══════════
+   The same app files run two sites; this file is the only one that differs.
+
+   THIS COPY: the FREE public app (GitHub Pages) — guests welcome.
+   After someone creates an account here, they are taken to the Premium Portal. */
+window.ADELANI_BACKEND    = "https://adelani-ai-backend.mikeade3000.workers.dev";
+window.ADELANI_MODE       = "free";
+window.ADELANI_PORTAL_URL = "https://adelani-si.portals.com.ng";
+window.ADELANI_FREE_URL   = "https://mikeade3000.github.io/Adelani-Chat-AI";
